@@ -1,0 +1,35 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Speech Bubble -->
+    <path
+        android:fillColor="#00E676"
+        android:pathData="M35,30h20c2.2,0 4,1.8 4,4v15c0,2.2 -1.8,4 -4,4h-12l-6,6v-6h-2c-2.2,0 -4,-1.8 -4,-4v-15c0,-2.2 1.8,-4 4,-4z"/>
+
+    <!-- Bell inside bubble -->
+    <path
+        android:fillColor="#004D40"
+        android:pathData="M45,35c-2.2,0 -4,1.8 -4,4v5h-1v1h10v-1h-1v-5c0,-2.2 -1.8,-4 -4,-4zM45,47c0.6,0 1,-0.4 1,-1h-2c0,0.6 0.4,1 1,1z"/>
+
+    <!-- Calendar -->
+    <path
+        android:fillColor="#424242"
+        android:pathData="M55,40h25c1.1,0 2,0.9 2,2v25c0,1.1 -0.9,2 -2,2h-25c-1.1,0 -2,-0.9 -2,-2v-25c0,-1.1 0.9,-2 2,-2z"/>
+    <path
+        android:fillColor="#00E676"
+        android:pathData="M55,45h25v5h-25z"/>
+
+    <!-- Small dots in calendar -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M60,55h2v2h-2z M65,55h2v2h-2z M70,55h2v2h-2z M60,60h2v2h-2z M65,60h2v2h-2z"/>
+
+    <!-- Pixel Diamond -->
+    <path
+        android:fillColor="#00E676"
+        android:pathData="M50,55l8,8l-8,8l-8,-8z"/>
+
+</vector>

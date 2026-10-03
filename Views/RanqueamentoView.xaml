@@ -1,0 +1,874 @@
+<UserControl x:Class="CobraPix_PC.Views.RanqueamentoView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:vmm="clr-namespace:CobraPix_PC.ViewModels.Modules"
+             mc:Ignorable="d" 
+             d:DesignHeight="750" d:DesignWidth="1100"
+             d:DataContext="{d:DesignInstance Type=vmm:RanqueamentoViewModel}">
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <!-- 0. Header -->
+            <RowDefinition Height="Auto" />
+            <!-- 1. Alertas / Erro -->
+            <RowDefinition Height="Auto" />
+            <!-- 2. Barra de Busca e Filtros -->
+            <RowDefinition Height="Auto" />
+            <!-- 3. Tabela de Classificação -->
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- ======================================================== -->
+        <!-- 0. CABEÇALHO DO MÓDULO                                   -->
+        <!-- ======================================================== -->
+        <Grid Grid.Row="0" Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="🏅" FontSize="22" Margin="0,0,8,0" VerticalAlignment="Center" />
+                    <TextBlock Text="Classificação de Clientes por Comportamento Financeiro"
+                               FontSize="20"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+                <TextBlock Text="Avaliação objetiva por letras (S a E) baseada em pontualidade de pagamentos, ausência de atrasos e regularidade financeira."
+                           FontSize="12"
+                           Foreground="{DynamicResource TextSecondaryBrush}"
+                           Margin="0,4,0,0" />
+            </StackPanel>
+
+            <!-- Resumo das Faixas -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <Border Background="{DynamicResource CardDarkBrush}"
+                        BorderBrush="{DynamicResource BorderDarkBrush}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="12,6"
+                        Margin="0,0,8,0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Total Avaliado: "
+                                   FontSize="12"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding TotalRankedCount}"
+                                   FontSize="14"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource TextPrimaryBrush}"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+
+                <Border Background="{DynamicResource CardDarkBrush}"
+                        BorderBrush="#F59E0B"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="10,6"
+                        Margin="0,0,4,0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="[S] " FontWeight="Bold" Foreground="#F59E0B" FontSize="12" />
+                        <TextBlock Text="{Binding CountRankS}" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" FontSize="12" />
+                    </StackPanel>
+                </Border>
+
+                <Border Background="{DynamicResource CardDarkBrush}"
+                        BorderBrush="#10B981"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="10,6"
+                        Margin="0,0,4,0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="[A] " FontWeight="Bold" Foreground="#10B981" FontSize="12" />
+                        <TextBlock Text="{Binding CountRankA}" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" FontSize="12" />
+                    </StackPanel>
+                </Border>
+
+                <Border Background="{DynamicResource CardDarkBrush}"
+                        BorderBrush="#3B82F6"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="10,6"
+                        Margin="0,0,4,0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="[B] " FontWeight="Bold" Foreground="#3B82F6" FontSize="12" />
+                        <TextBlock Text="{Binding CountRankB}" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" FontSize="12" />
+                    </StackPanel>
+                </Border>
+
+                <Border Background="{DynamicResource CardDarkBrush}"
+                        BorderBrush="#EAB308"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="10,6"
+                        Margin="0,0,4,0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="[C] " FontWeight="Bold" Foreground="#EAB308" FontSize="12" />
+                        <TextBlock Text="{Binding CountRankC}" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" FontSize="12" />
+                    </StackPanel>
+                </Border>
+
+                <Border Background="{DynamicResource CardDarkBrush}"
+                        BorderBrush="#F97316"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="10,6"
+                        Margin="0,0,4,0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="[D] " FontWeight="Bold" Foreground="#F97316" FontSize="12" />
+                        <TextBlock Text="{Binding CountRankD}" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" FontSize="12" />
+                    </StackPanel>
+                </Border>
+
+                <Border Background="{DynamicResource CardDarkBrush}"
+                        BorderBrush="#EF4444"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="10,6">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="[E] " FontWeight="Bold" Foreground="#EF4444" FontSize="12" />
+                        <TextBlock Text="{Binding CountRankE}" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" FontSize="12" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Grid>
+
+        <!-- ======================================================== -->
+        <!-- 1. ALERTAS / ERRO                                        -->
+        <!-- ======================================================== -->
+        <Border Grid.Row="1"
+                Background="#2A1515"
+                BorderBrush="{DynamicResource DangerBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="14,10"
+                Margin="0,0,0,14">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding HasError}" Value="True">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <TextBlock Text="{Binding ErrorMessage}"
+                       Foreground="{DynamicResource DangerBrush}"
+                       FontSize="12"
+                       FontWeight="SemiBold" />
+        </Border>
+
+        <!-- ======================================================== -->
+        <!-- 2. BARRA DE BUSCA E FILTROS SEGMENTADOS                  -->
+        <!-- ======================================================== -->
+        <Border Grid.Row="2"
+                Background="{DynamicResource CardDarkBrush}"
+                BorderBrush="{DynamicResource BorderDarkBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="14,10"
+                Margin="0,0,0,16">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- Linha 1: Busca e Filtros de Situação Cadastral -->
+                <Grid Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <!-- Campo de Busca -->
+                        <ColumnDefinition Width="*" />
+                        <!-- Espaçamento -->
+                        <ColumnDefinition Width="16" />
+                        <!-- Filtros de Situação -->
+                        <ColumnDefinition Width="Auto" />
+                        <!-- Botão Recarregar -->
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Campo de Pesquisa -->
+                    <Grid Grid.Column="0">
+                        <TextBox Style="{StaticResource InputTextBoxStyle}"
+                                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                 Padding="32,7,28,7"
+                                 VerticalContentAlignment="Center" />
+
+                        <TextBlock Text="🔍"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   HorizontalAlignment="Left"
+                                   VerticalAlignment="Center"
+                                   Margin="10,0,0,0"
+                                   IsHitTestVisible="False" />
+
+                        <TextBlock Text="Pesquisar por nome, telefone ou classificação..."
+                                   FontSize="12"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   HorizontalAlignment="Left"
+                                   VerticalAlignment="Center"
+                                   Margin="34,0,0,0"
+                                   IsHitTestVisible="False">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasSearchText}" Value="False">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+
+                        <Button Command="{Binding ClearSearchCommand}"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Foreground="{DynamicResource TextMutedBrush}"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                Margin="0,0,8,0"
+                                Cursor="Hand"
+                                Content="✕"
+                                FontSize="12">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasSearchText}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </Grid>
+
+                    <!-- Filtros de Situação -->
+                    <Border Grid.Column="2"
+                            Background="{DynamicResource SurfaceBrush}"
+                            BorderBrush="{DynamicResource BorderDarkBrush}"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="2"
+                            Margin="0,0,12,0">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Command="{Binding SetStatusFilterCommand}"
+                                    CommandParameter="{x:Static vmm:RanqueamentoStatusFilter.Todos}"
+                                    Height="30" Padding="12,0" BorderThickness="0" Cursor="Hand">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Background" Value="Transparent" />
+                                        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsStatusTodos}" Value="True">
+                                                <Setter Property="Background" Value="{DynamicResource CardDarkBrush}" />
+                                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                                                <Setter Property="FontWeight" Value="SemiBold" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                                <TextBlock Text="Todos" VerticalAlignment="Center" />
+                            </Button>
+
+                            <Button Command="{Binding SetStatusFilterCommand}"
+                                    CommandParameter="{x:Static vmm:RanqueamentoStatusFilter.Ativos}"
+                                    Height="30" Padding="12,0" BorderThickness="0" Cursor="Hand">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Background" Value="Transparent" />
+                                        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsStatusAtivos}" Value="True">
+                                                <Setter Property="Background" Value="{DynamicResource CardDarkBrush}" />
+                                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                                                <Setter Property="FontWeight" Value="SemiBold" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                                <TextBlock Text="Ativos" VerticalAlignment="Center" />
+                            </Button>
+
+                            <Button Command="{Binding SetStatusFilterCommand}"
+                                    CommandParameter="{x:Static vmm:RanqueamentoStatusFilter.Quitados}"
+                                    Height="30" Padding="12,0" BorderThickness="0" Cursor="Hand">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Background" Value="Transparent" />
+                                        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsStatusQuitados}" Value="True">
+                                                <Setter Property="Background" Value="{DynamicResource CardDarkBrush}" />
+                                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                                                <Setter Property="FontWeight" Value="SemiBold" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                                <TextBlock Text="Quitados" VerticalAlignment="Center" />
+                            </Button>
+
+                            <Button Command="{Binding SetStatusFilterCommand}"
+                                    CommandParameter="{x:Static vmm:RanqueamentoStatusFilter.Arquivados}"
+                                    Height="30" Padding="12,0" BorderThickness="0" Cursor="Hand">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Background" Value="Transparent" />
+                                        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsStatusArquivados}" Value="True">
+                                                <Setter Property="Background" Value="{DynamicResource CardDarkBrush}" />
+                                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                                                <Setter Property="FontWeight" Value="SemiBold" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                                <TextBlock Text="Arquivados" VerticalAlignment="Center" />
+                            </Button>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Botão Recarregar -->
+                    <Button Grid.Column="3"
+                            Content="Recarregar 🔄"
+                            Command="{Binding LoadDataCommand}"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            Padding="12,6"
+                            FontSize="12" />
+                </Grid>
+
+                <!-- Linha 2: Chips de Filtro por Classificação em Letras -->
+                <Border Grid.Row="1"
+                        Margin="0,10,0,0"
+                        Padding="0,6,0,0"
+                        BorderBrush="{DynamicResource BorderDarkBrush}"
+                        BorderThickness="0,1,0,0">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="Filtrar por Faixa: "
+                                   FontSize="12"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,10,0" />
+
+                        <!-- Todas -->
+                        <Button Command="{Binding SetRankFilterCommand}"
+                                CommandParameter="Todas"
+                                Height="28" Padding="10,0" Margin="0,0,6,0" Cursor="Hand">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="Transparent" />
+                                    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}" BorderBrush="{DynamicResource BorderDarkBrush}" BorderThickness="1">
+                                                    <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsFilterAllRanks}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+                                            <Setter Property="Foreground" Value="#0A0E17" />
+                                            <Setter Property="FontWeight" Value="Bold" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <TextBlock Text="Todas as Faixas" FontSize="11" />
+                        </Button>
+
+                        <!-- S -->
+                        <Button Command="{Binding SetRankFilterCommand}"
+                                CommandParameter="S"
+                                Height="28" Padding="10,0" Margin="0,0,6,0" Cursor="Hand">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="Transparent" />
+                                    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}" BorderBrush="#F59E0B" BorderThickness="1">
+                                                    <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsFilterRankS}" Value="True">
+                                            <Setter Property="Background" Value="#F59E0B" />
+                                            <Setter Property="Foreground" Value="#000000" />
+                                            <Setter Property="FontWeight" Value="Bold" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <TextBlock Text="[S] Pagador Ouro" FontSize="11" />
+                        </Button>
+
+                        <!-- A -->
+                        <Button Command="{Binding SetRankFilterCommand}"
+                                CommandParameter="A"
+                                Height="28" Padding="10,0" Margin="0,0,6,0" Cursor="Hand">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="Transparent" />
+                                    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}" BorderBrush="#10B981" BorderThickness="1">
+                                                    <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsFilterRankA}" Value="True">
+                                            <Setter Property="Background" Value="#10B981" />
+                                            <Setter Property="Foreground" Value="#000000" />
+                                            <Setter Property="FontWeight" Value="Bold" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <TextBlock Text="[A] Top" FontSize="11" />
+                        </Button>
+
+                        <!-- B -->
+                        <Button Command="{Binding SetRankFilterCommand}"
+                                CommandParameter="B"
+                                Height="28" Padding="10,0" Margin="0,0,6,0" Cursor="Hand">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="Transparent" />
+                                    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}" BorderBrush="#3B82F6" BorderThickness="1">
+                                                    <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsFilterRankB}" Value="True">
+                                            <Setter Property="Background" Value="#3B82F6" />
+                                            <Setter Property="Foreground" Value="#FFFFFF" />
+                                            <Setter Property="FontWeight" Value="Bold" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <TextBlock Text="[B] Bom" FontSize="11" />
+                        </Button>
+
+                        <!-- C -->
+                        <Button Command="{Binding SetRankFilterCommand}"
+                                CommandParameter="C"
+                                Height="28" Padding="10,0" Margin="0,0,6,0" Cursor="Hand">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="Transparent" />
+                                    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}" BorderBrush="#EAB308" BorderThickness="1">
+                                                    <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsFilterRankC}" Value="True">
+                                            <Setter Property="Background" Value="#EAB308" />
+                                            <Setter Property="Foreground" Value="#000000" />
+                                            <Setter Property="FontWeight" Value="Bold" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <TextBlock Text="[C] Médio" FontSize="11" />
+                        </Button>
+
+                        <!-- D -->
+                        <Button Command="{Binding SetRankFilterCommand}"
+                                CommandParameter="D"
+                                Height="28" Padding="10,0" Margin="0,0,6,0" Cursor="Hand">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="Transparent" />
+                                    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}" BorderBrush="#F97316" BorderThickness="1">
+                                                    <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsFilterRankD}" Value="True">
+                                            <Setter Property="Background" Value="#F97316" />
+                                            <Setter Property="Foreground" Value="#FFFFFF" />
+                                            <Setter Property="FontWeight" Value="Bold" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <TextBlock Text="[D] Mais ou menos" FontSize="11" />
+                        </Button>
+
+                        <!-- E -->
+                        <Button Command="{Binding SetRankFilterCommand}"
+                                CommandParameter="E"
+                                Height="28" Padding="10,0" Cursor="Hand">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="Transparent" />
+                                    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}" BorderBrush="#EF4444" BorderThickness="1">
+                                                    <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsFilterRankE}" Value="True">
+                                            <Setter Property="Background" Value="#EF4444" />
+                                            <Setter Property="Foreground" Value="#FFFFFF" />
+                                            <Setter Property="FontWeight" Value="Bold" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <TextBlock Text="[E] Ruim" FontSize="11" />
+                        </Button>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- ======================================================== -->
+        <!-- 3. TABELA DE DADOS DO RANQUEAMENTO                       -->
+        <!-- ======================================================== -->
+        <Border Grid.Row="3"
+                Background="{DynamicResource CardDarkBrush}"
+                BorderBrush="{DynamicResource BorderDarkBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="16">
+            <Grid>
+                <!-- Estado Vazio (Sem Dados) -->
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsEmpty}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <TextBlock Text="🏅" FontSize="40" HorizontalAlignment="Center" Margin="0,0,0,10" />
+                    <TextBlock Text="Nenhum cliente avaliado"
+                               FontSize="16"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               HorizontalAlignment="Center" />
+                    <TextBlock Text="A classificação é calculada automaticamente conforme você cadastra clientes e gerencia pagamentos."
+                               FontSize="12"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
+                               HorizontalAlignment="Center"
+                               Margin="0,4,0,0" />
+                </StackPanel>
+
+                <!-- Estado Vazio (Busca Sem Resultados) -->
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsSearchEmpty}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <TextBlock Text="🔍" FontSize="36" HorizontalAlignment="Center" Margin="0,0,0,10" />
+                    <TextBlock Text="Nenhum cliente encontrado"
+                               FontSize="15"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               HorizontalAlignment="Center" />
+                    <TextBlock Text="Verifique os termos pesquisados ou alterne os filtros."
+                               FontSize="12"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
+                               HorizontalAlignment="Center"
+                               Margin="0,4,0,12" />
+                    <Button Content="Limpar Pesquisa"
+                            Command="{Binding ClearSearchCommand}"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            HorizontalAlignment="Center"
+                            Padding="12,6"
+                            FontSize="12" />
+                </StackPanel>
+
+                <!-- DataGrid de Ranqueamento -->
+                <DataGrid ItemsSource="{Binding FilteredRanked}"
+                          SelectedItem="{Binding SelectedItem}"
+                          AutoGenerateColumns="False"
+                          IsReadOnly="True"
+                          SelectionMode="Single"
+                          Background="Transparent"
+                          BorderThickness="0"
+                          GridLinesVisibility="Horizontal"
+                          HorizontalGridLinesBrush="{DynamicResource BorderDarkBrush}"
+                          RowBackground="Transparent"
+                          HeadersVisibility="Column">
+                    <DataGrid.Style>
+                        <Style TargetType="DataGrid">
+                            <Setter Property="Visibility" Value="Visible" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsEmpty}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsSearchEmpty}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGrid.Style>
+
+                    <DataGrid.ColumnHeaderStyle>
+                        <Style TargetType="DataGridColumnHeader">
+                            <Setter Property="Background" Value="{DynamicResource HeaderDarkBrush}" />
+                            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+                            <Setter Property="FontWeight" Value="SemiBold" />
+                            <Setter Property="FontSize" Value="11" />
+                            <Setter Property="Padding" Value="12,8" />
+                            <Setter Property="BorderThickness" Value="0,0,0,1" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource BorderDarkBrush}" />
+                        </Style>
+                    </DataGrid.ColumnHeaderStyle>
+
+                    <DataGrid.RowStyle>
+                        <Style TargetType="DataGridRow">
+                            <Setter Property="Padding" Value="0,4" />
+                            <Setter Property="Cursor" Value="Hand" />
+                            <Style.Triggers>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+                                    <Setter Property="BorderBrush" Value="{DynamicResource AccentDarkBrush}" />
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGrid.RowStyle>
+
+                    <DataGrid.Columns>
+                        <!-- 1. Cliente -->
+                        <DataGridTemplateColumn Header="CLIENTE" Width="2*">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="12,6">
+                                        <TextBlock Text="{Binding ClientName}"
+                                                   FontWeight="SemiBold"
+                                                   FontSize="13"
+                                                   Foreground="{DynamicResource TextPrimaryBrush}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{Binding FormattedPhone}"
+                                                   FontSize="11"
+                                                   Foreground="{DynamicResource TextMutedBrush}"
+                                                   Margin="0,2,0,0" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- 2. Classificação -->
+                        <DataGridTemplateColumn Header="CLASSIFICAÇÃO" Width="1.8*">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Border BorderBrush="{Binding RankColorHex}"
+                                            BorderThickness="1"
+                                            CornerRadius="6"
+                                            Padding="10,4"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Center"
+                                            Margin="8,4">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding RankLetter}"
+                                                       FontWeight="Bold"
+                                                       FontSize="13"
+                                                       Foreground="{Binding RankColorHex}"
+                                                       Margin="0,0,6,0" />
+                                            <TextBlock Text="{Binding RankDescription}"
+                                                       FontWeight="SemiBold"
+                                                       FontSize="12"
+                                                       Foreground="{DynamicResource TextPrimaryBrush}" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- 3. Histórico de Pagamento -->
+                        <DataGridTemplateColumn Header="HISTÓRICO DE PAGAMENTO" Width="2*">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="12,6" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding FormattedOnTimePercentage}"
+                                                   FontSize="12"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource TextPrimaryBrush}" />
+                                        <TextBlock Text="{Binding PaymentHistoryDetail}"
+                                                   FontSize="11"
+                                                   Foreground="{DynamicResource TextMutedBrush}"
+                                                   Margin="0,2,0,0" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- 4. Pagamentos -->
+                        <DataGridTemplateColumn Header="PAGAMENTOS" Width="1.5*">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="12,6" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding FormattedPaymentsSummary}"
+                                                   FontSize="12"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource SuccessBrush}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- 5. Atrasos -->
+                        <DataGridTemplateColumn Header="ATRASOS" Width="1.5*">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="12,6" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding FormattedOverdueSummary}"
+                                                   FontSize="12"
+                                                   FontWeight="SemiBold">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasOverdue}" Value="True">
+                                                            <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
+                                                            <Setter Property="FontWeight" Value="Bold" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- 6. Situação -->
+                        <DataGridTemplateColumn Header="SITUAÇÃO" Width="1.1*">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Border CornerRadius="4"
+                                            Padding="8,3"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Center"
+                                            Margin="12,6">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsQuitado}" Value="True">
+                                                        <Setter Property="Background" Value="#16382B" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding IsArchived}" Value="True">
+                                                        <Setter Property="Background" Value="#252D3D" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <TextBlock Text="{Binding StatusDescription}"
+                                                   FontSize="10"
+                                                   FontWeight="Bold">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsQuitado}" Value="True">
+                                                            <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsArchived}" Value="True">
+                                                            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Border>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

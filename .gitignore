@@ -1,0 +1,68 @@
+# =======================================================
+# CobraPix PC — .gitignore Oficial
+# =======================================================
+
+# Visual Studio & IDEs
+.vs/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+# Build & Compilation Outputs
+[Bb]in/
+[Oo]bj/
+[Aa]rtifacts/
+PublishScripts/
+*.orig
+*.ilmanifest
+_ReSharper*/
+
+# Database & SQLite Data Files (REGRA ABSOLUTA: Nenhum banco de dados)
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.db3
+
+# CobraPix Proprietary Backups
+*.cpb
+
+# Crash dumps, Logs & Temporaries
+*.log
+*.dmp
+*.crash
+*.tmp
+*.bak
+scratch_*.txt
+*.scratch
+
+# Android build, artifacts & archives
+Android/CobraPix.zip
+Android/*.zip
+Android/**/*.zip
+.gradle/
+build/
+
+# Windows Desktop & OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Rider / JetBrains
+.idea/
+*.sln.iml
+
+# Secrets & Environment variables
+*.env
+*.env.*
+*.pfx
+*.p12
+*.pem
+*.key
+appsettings.Production.json
+appsettings.Local.json

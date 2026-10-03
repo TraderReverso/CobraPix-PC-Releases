@@ -1,0 +1,4 @@
+- `[x]` Analisar `build.gradle.kts` e confirmar o Billing `8.0.0` e ApplicationId `com.cobrapix.app`.
+- `[x]` Alterar `versionCode` para 2 e `versionName` para 1.0.1.
+- `[x]` Procurar arquivo de Keystore (`.jks` / `.keystore`) e bloco `signingConfigs`.
+- `[x]` PAUSAR geração do AAB de Release devido à ausência das credenciais da chave de upload.

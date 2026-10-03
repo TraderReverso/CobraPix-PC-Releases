@@ -1,0 +1,396 @@
+<Window x:Class="CobraPix_PC.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:CobraPix_PC"
+        xmlns:vm="clr-namespace:CobraPix_PC.ViewModels"
+        xmlns:vmm="clr-namespace:CobraPix_PC.ViewModels.Modules"
+        xmlns:views="clr-namespace:CobraPix_PC.Views"
+        mc:Ignorable="d"
+        Title="CobraPix PC - Gestão Financeira e Cobranças"
+        Icon="Assets/app_icon.ico"
+        Height="780" Width="1200"
+        MinHeight="650" MinWidth="1024"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource BgDarkBrush}">
+
+    <Window.DataContext>
+        <vm:MainViewModel />
+    </Window.DataContext>
+
+    <Window.Resources>
+        <!-- DataTemplate específico para o Dashboard (Fase 14) -->
+        <DataTemplate DataType="{x:Type vmm:DashboardViewModel}">
+            <views:DashboardView />
+        </DataTemplate>
+
+        <!-- DataTemplate específico para o Módulo de Clientes (Fase 4B) -->
+        <DataTemplate DataType="{x:Type vm:ClientesViewModel}">
+            <views:ClientesView />
+        </DataTemplate>
+
+        <!-- DataTemplate específico para o Módulo de Vendas (Fase 5) -->
+        <DataTemplate DataType="{x:Type vm:VendasViewModel}">
+            <views:VendasView />
+        </DataTemplate>
+
+        <!-- DataTemplate específico para o Módulo de Parcelas (Fase 5) -->
+        <DataTemplate DataType="{x:Type vm:ParcelasViewModel}">
+            <views:ParcelasView />
+        </DataTemplate>
+
+        <!-- DataTemplate específico para o Módulo de Pagamentos (Fase 6) -->
+        <DataTemplate DataType="{x:Type vm:PagamentosViewModel}">
+            <views:PagamentosView />
+        </DataTemplate>
+
+        <!-- DataTemplate específico para o Módulo de Mensalistas (Fase 7) -->
+        <DataTemplate DataType="{x:Type vm:MensalistasViewModel}">
+            <views:MensalistasView />
+        </DataTemplate>
+
+        <!-- DataTemplate específico para o Módulo de Vencimentos (Fase 8) -->
+        <DataTemplate DataType="{x:Type vm:VencimentosViewModel}">
+            <views:VencimentosView />
+        </DataTemplate>
+
+        <!-- DataTemplate específico para o Módulo de Atrasados (Fase 8) -->
+        <DataTemplate DataType="{x:Type vm:AtrasadosViewModel}">
+            <views:AtrasadosView />
+        </DataTemplate>
+
+        <!-- DataTemplate específico para o Módulo de Cobranças (Fase 9) -->
+        <DataTemplate DataType="{x:Type vm:CobrancasViewModel}">
+            <views:CobrancasView />
+        </DataTemplate>
+
+        <!-- DataTemplate específico para o Módulo de Quitados (Fase 14) -->
+        <DataTemplate DataType="{x:Type vmm:QuitadosViewModel}">
+            <views:QuitadosView />
+        </DataTemplate>
+
+        <!-- DataTemplate específico para o Módulo de Arquivados (Fase 14) -->
+        <DataTemplate DataType="{x:Type vmm:ArquivadosViewModel}">
+            <views:ArquivadosView />
+        </DataTemplate>
+
+        <!-- DataTemplate específico para o Módulo de Ranqueamento (Fase 14) -->
+        <DataTemplate DataType="{x:Type vmm:RanqueamentoViewModel}">
+            <views:RanqueamentoView />
+        </DataTemplate>
+
+        <!-- DataTemplate específico para o Módulo CobraPix PRO (Fase 14) -->
+        <DataTemplate DataType="{x:Type vmm:ProViewModel}">
+            <views:ProView />
+        </DataTemplate>
+
+        <!-- DataTemplate específico para o Módulo de Configurações (Fase 11) -->
+        <DataTemplate DataType="{x:Type vm:ConfiguracoesViewModel}">
+            <views:ConfiguracoesView />
+        </DataTemplate>
+
+        <!-- DataTemplate específico para o Módulo de Histórico Financeiro (Fase 2) -->
+        <DataTemplate DataType="{x:Type vmm:HistoricoFinanceiroViewModel}">
+            <views:HistoricoFinanceiroView />
+        </DataTemplate>
+
+        <!-- DataTemplate padrão para todos os módulos baseados em ModuleViewModelBase -->
+        <DataTemplate DataType="{x:Type vm:ModuleViewModelBase}">
+            <views:ModulePlaceholderView />
+        </DataTemplate>
+
+        <!-- Template reutilizável para cada item de navegação da Sidebar -->
+        <DataTemplate x:Key="NavigationItemTemplate" DataType="{x:Type vm:NavigationItem}">
+            <Button Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                    CommandParameter="{Binding}">
+                <Button.Style>
+                    <Style TargetType="Button" BasedOn="{StaticResource NavButtonStyle}">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource CardDarkBrush}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Indicador visual ciano lateral para item selecionado -->
+                    <Border Grid.Column="0"
+                            Width="3" Height="20"
+                            CornerRadius="2"
+                            Margin="-12,0,8,0"
+                            HorizontalAlignment="Left">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="Transparent" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                    </Border>
+
+                    <!-- Ícone + Título do Menu -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Icon}"
+                                   FontSize="14"
+                                   Width="24"
+                                   VerticalAlignment="Center"
+                                   TextAlignment="Center" />
+                        <TextBlock Text="{Binding Title}"
+                                   FontSize="13"
+                                   VerticalAlignment="Center"
+                                   Margin="8,0,0,0">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </StackPanel>
+
+                    <!-- Tag / Badge (ex: PRO) -->
+                    <Border Grid.Column="2"
+                            Background="{DynamicResource ProBadgeBrush}"
+                            CornerRadius="3"
+                            Padding="6,1"
+                            VerticalAlignment="Center"
+                            Margin="4,0,0,0">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasBadge}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock Text="{Binding Badge}"
+                                   FontSize="9"
+                                   FontWeight="Bold"
+                                   Foreground="#000000" />
+                    </Border>
+                </Grid>
+            </Button>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <!-- Coluna 0: Sidebar (Menu Lateral) -->
+            <ColumnDefinition Width="245" />
+            <!-- Coluna 1: Área Principal (Header + Content) -->
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- ======================================================== -->
+        <!-- SIDEBAR DE NAVEGAÇÃO                                     -->
+        <!-- ======================================================== -->
+        <Border Grid.Column="0"
+                Background="{DynamicResource SidebarDarkBrush}"
+                BorderBrush="{DynamicResource BorderDarkBrush}"
+                BorderThickness="0,0,1,0">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <!-- Header do Logo -->
+                    <RowDefinition Height="64" />
+                    <!-- Lista de Menus com ScrollViewer -->
+                    <RowDefinition Height="*" />
+                    <!-- Separador -->
+                    <RowDefinition Height="Auto" />
+                    <!-- Itens Fixos de Rodapé -->
+                    <RowDefinition Height="Auto" />
+                    <!-- Rodapé de Versão/Status -->
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- 1. Marca / Logo CobraPix PC -->
+                <Border Grid.Row="0"
+                        BorderBrush="{DynamicResource BorderDarkBrush}"
+                        BorderThickness="0,0,0,1"
+                        Padding="18,0">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <!-- Símbolo / Ícone -->
+                        <Border Width="34" Height="34"
+                                CornerRadius="8"
+                                ClipToBounds="True"
+                                BorderBrush="{DynamicResource AccentDarkBrush}"
+                                BorderThickness="1"
+                                Margin="0,0,10,0">
+                            <Image Source="Assets/app_icon.png"
+                                   Width="34" Height="34"
+                                   RenderOptions.BitmapScalingMode="HighQuality" />
+                        </Border>
+
+                        <!-- Nome CobraPix -->
+                        <StackPanel VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Cobra"
+                                           FontSize="17"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource TextPrimaryBrush}" />
+                                <TextBlock Text="Pix"
+                                           FontSize="17"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource AccentBrush}" />
+                                <Border Background="{DynamicResource CardDarkBrush}"
+                                        CornerRadius="3"
+                                        Padding="4,1"
+                                        Margin="6,0,0,0"
+                                        VerticalAlignment="Center">
+                                    <TextBlock Text="PC"
+                                               FontSize="10"
+                                               FontWeight="Bold"
+                                               Foreground="{DynamicResource AccentBrush}" />
+                                </Border>
+                            </StackPanel>
+                            <TextBlock Text="Controle &amp; Cobranças"
+                                       FontSize="10"
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       Margin="0,-2,0,0" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- 2. Grupos de Navegação com ScrollViewer -->
+                <ScrollViewer Grid.Row="1"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              Padding="6,8">
+                    <StackPanel>
+                        <!-- Grupo: PRINCIPAL -->
+                        <TextBlock Text="PRINCIPAL" Style="{StaticResource TextMenuCategory}" />
+                        <ItemsControl ItemsSource="{Binding MainMenuItems}"
+                                      ItemTemplate="{StaticResource NavigationItemTemplate}" />
+
+                        <!-- Grupo: RECORRÊNCIA & COBRANÇA -->
+                        <TextBlock Text="RECORRÊNCIA &amp; COBRANÇA" Style="{StaticResource TextMenuCategory}" />
+                        <ItemsControl ItemsSource="{Binding RecurrenceMenuItems}"
+                                      ItemTemplate="{StaticResource NavigationItemTemplate}" />
+
+                        <!-- Grupo: CONSULTAS & STATUS -->
+                        <TextBlock Text="CONSULTAS &amp; STATUS" Style="{StaticResource TextMenuCategory}" />
+                        <ItemsControl ItemsSource="{Binding StatusMenuItems}"
+                                      ItemTemplate="{StaticResource NavigationItemTemplate}" />
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- 3. Separador -->
+                <Border Grid.Row="2"
+                        Height="1"
+                        Background="{DynamicResource BorderDarkBrush}"
+                        Margin="12,4" />
+
+                <!-- 4. Menus de Rodapé (PRO & Configurações) -->
+                <ItemsControl Grid.Row="3"
+                              ItemsSource="{Binding FooterMenuItems}"
+                              ItemTemplate="{StaticResource NavigationItemTemplate}"
+                              Margin="6,4,6,6" />
+
+                <!-- 5. Rodapé Informativo (Status Offline) -->
+                <Border Grid.Row="4"
+                        BorderBrush="{DynamicResource BorderDarkBrush}"
+                        BorderThickness="0,1,0,0"
+                        Padding="14,10">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Border Width="6" Height="6"
+                                CornerRadius="3"
+                                Background="{DynamicResource SuccessBrush}"
+                                Margin="0,0,6,0"
+                                VerticalAlignment="Center" />
+                        <TextBlock Text="v1.0 • Banco Local Ativo"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- ======================================================== -->
+        <!-- ÁREA PRINCIPAL (HEADER + CONTEÚDO)                       -->
+        <!-- ======================================================== -->
+        <Grid Grid.Column="1">
+            <Grid.RowDefinitions>
+                <!-- Cabeçalho (Header) -->
+                <RowDefinition Height="64" />
+                <!-- Conteúdo Dinâmico -->
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- CABEÇALHO SUPERIOR -->
+            <Border Grid.Row="0"
+                    Background="{DynamicResource HeaderDarkBrush}"
+                    BorderBrush="{DynamicResource BorderDarkBrush}"
+                    BorderThickness="0,0,0,1"
+                    Padding="24,0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <!-- Título e Subtítulo da Seção Atual -->
+                        <ColumnDefinition Width="*" />
+                        <!-- Ações Rápidas do Cabeçalho -->
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Identificação da Seção Ativa -->
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding CurrentTitle}"
+                                   Style="{StaticResource TextHeaderSectionTitle}" />
+                        <TextBlock Text="{Binding CurrentDescription}"
+                                   Style="{StaticResource TextHeaderSubtitle}"
+                                   Margin="0,2,0,0"
+                                   TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+
+                    <!-- Botões Rápidos à Direita -->
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center">
+
+                        <!-- Botão Acesso Rápido ao PRO -->
+                        <Button Style="{StaticResource HeaderActionButtonStyle}"
+                                Command="{Binding OpenProCommand}"
+                                Margin="0,0,8,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="👑" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                <TextBlock Text="CobraPix PRO" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="{DynamicResource ProBadgeBrush}" />
+                            </StackPanel>
+                        </Button>
+
+                        <!-- Botão Acesso Rápido a Configurações -->
+                        <Button Style="{StaticResource HeaderActionButtonStyle}"
+                                Command="{Binding OpenConfigCommand}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="⚙️" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                <TextBlock Text="Configurações" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- ÁREA CENTRAL DE CONTEÚDO (Módulo Ativo) -->
+            <Border Grid.Row="1"
+                    Background="{DynamicResource BgDarkBrush}">
+                <ContentControl Content="{Binding CurrentViewModel}"
+                                Focusable="False" />
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

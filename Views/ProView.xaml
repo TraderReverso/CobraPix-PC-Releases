@@ -1,0 +1,495 @@
+<UserControl x:Class="CobraPix_PC.Views.ProView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:vmm="clr-namespace:CobraPix_PC.ViewModels.Modules"
+             mc:Ignorable="d" 
+             d:DesignHeight="750" d:DesignWidth="1100"
+             d:DataContext="{d:DesignInstance Type=vmm:ProViewModel}">
+
+    <Grid>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <Grid Margin="32">
+                <Grid.RowDefinitions>
+                    <!-- 0. Header -->
+                    <RowDefinition Height="Auto" />
+                    <!-- 1. Alerta de Mensagem -->
+                    <RowDefinition Height="Auto" />
+                    <!-- 2. Status Atual do Plano -->
+                    <RowDefinition Height="Auto" />
+                    <!-- 3. Cards de Planos (Free vs PRO) -->
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- ======================================================== -->
+                <!-- 0. CABEÇALHO DO MÓDULO PRO                               -->
+                <!-- ======================================================== -->
+                <StackPanel Grid.Row="0" Margin="0,0,0,24">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="👑" FontSize="26" Margin="0,0,10,0" VerticalAlignment="Center" />
+                        <TextBlock Text="CobraPix PRO"
+                                   FontSize="24"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource TextPrimaryBrush}"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Text="Desbloqueie todo o potencial da gestão de cobranças sem limitações de clientes ativos."
+                               FontSize="13"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
+                               Margin="0,6,0,0" />
+                </StackPanel>
+
+                <!-- ======================================================== -->
+                <!-- 1. ALERTA / MENSAGEM DE STATUS                           -->
+                <!-- ======================================================== -->
+                <Border Grid.Row="1"
+                        Background="{DynamicResource SurfaceBrush}"
+                        BorderBrush="{DynamicResource AccentDarkBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="14,10"
+                        Margin="0,0,0,20">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasStatusMessage}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <TextBlock Text="{Binding StatusMessage}"
+                               Foreground="{DynamicResource AccentBrush}"
+                               FontSize="12"
+                               FontWeight="SemiBold" />
+                </Border>
+
+                <!-- ======================================================== -->
+                <!-- 2. STATUS ATUAL DO PLANO                                 -->
+                <!-- ======================================================== -->
+                <Border Grid.Row="2"
+                        Background="{DynamicResource CardDarkBrush}"
+                        BorderBrush="{DynamicResource BorderDarkBrush}"
+                        BorderThickness="1"
+                        CornerRadius="10"
+                        Padding="24,18"
+                        Margin="0,0,0,28">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="STATUS DA ASSINATURA:"
+                                           FontSize="11"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,10,0" />
+
+                                <Border CornerRadius="4"
+                                        Padding="10,4"
+                                        VerticalAlignment="Center">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background" Value="#334155" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsPro}" Value="True">
+                                                    <Setter Property="Background" Value="#B45309" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <TextBlock Text="{Binding PlanBadgeText}"
+                                               FontSize="11"
+                                               FontWeight="Bold">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="#E2E8F0" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsPro}" Value="True">
+                                                        <Setter Property="Foreground" Value="#FEF08A" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Border>
+                            </StackPanel>
+
+                            <TextBlock Text="{Binding ActiveClientsSummary}"
+                                       FontSize="14"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextPrimaryBrush}" />
+                        </StackPanel>
+
+                        <Button Grid.Column="1"
+                                Content="Atualizar Status 🔄"
+                                Command="{Binding RefreshPlanCommand}"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Padding="12,6"
+                                VerticalAlignment="Center"
+                                FontSize="12" />
+                    </Grid>
+                </Border>
+
+                <!-- ======================================================== -->
+                <!-- 3. COMPARAÇÃO DE PLANOS (FREE vs PRO)                    -->
+                <!-- ======================================================== -->
+                <Grid Grid.Row="3">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="24" />
+                        <ColumnDefinition Width="1.2*" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- CARD PLANO FREE -->
+                    <Border Grid.Column="0"
+                            Background="{DynamicResource CardDarkBrush}"
+                            BorderBrush="{DynamicResource BorderDarkBrush}"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            Padding="24">
+                        <StackPanel>
+                            <TextBlock Text="PLANO FREE"
+                                       FontSize="16"
+                                       FontWeight="Bold"
+                                       Foreground="{DynamicResource TextPrimaryBrush}" />
+                            <TextBlock Text="Gratuito para sempre"
+                                       FontSize="12"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                       Margin="0,4,0,16" />
+
+                            <TextBlock Text="R$ 0"
+                                       FontSize="28"
+                                       FontWeight="Bold"
+                                       Foreground="{DynamicResource TextPrimaryBrush}"
+                                       Margin="0,0,0,20" />
+
+                            <StackPanel Margin="0,0,0,24">
+                                <TextBlock Text="✓ Até 10 clientes ativos" FontSize="12" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,8" />
+                                <TextBlock Text="✓ Clientes arquivados sem limite" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8" />
+                                <TextBlock Text="✓ Vendas e parcelas ilimitadas" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8" />
+                                <TextBlock Text="✓ Mensalistas e recorrência" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8" />
+                                <TextBlock Text="✓ Backup e restauração local (.cpb)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8" />
+                                <TextBlock Text="✓ Notificações locais no Windows" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                            </StackPanel>
+
+                            <Border Background="{DynamicResource TagNeutralBgBrush}"
+                                    CornerRadius="6"
+                                    Padding="12,10"
+                                    HorizontalAlignment="Stretch">
+                                <TextBlock Text="Plano Básico Padrão"
+                                           FontSize="12"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           HorizontalAlignment="Center" />
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- CARD PLANO PRO -->
+                    <Border Grid.Column="2"
+                            Background="{DynamicResource CardDarkBrush}"
+                            BorderBrush="{DynamicResource ProBadgeBrush}"
+                            BorderThickness="2"
+                            CornerRadius="10"
+                            Padding="24">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,8">
+                                <TextBlock Text="👑 COBRAPIX PRO"
+                                           FontSize="18"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource ProBadgeBrush}" />
+                                <Border Background="#78350F"
+                                        CornerRadius="4"
+                                        Padding="8,2"
+                                        HorizontalAlignment="Right">
+                                    <TextBlock Text="RECOMENDADO"
+                                               FontSize="10"
+                                               FontWeight="Bold"
+                                               Foreground="#FDE68A" />
+                                </Border>
+                            </Grid>
+
+                            <TextBlock Text="Para negócios em expansão"
+                                       FontSize="12"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                       Margin="0,0,0,16" />
+
+                            <!-- Benefícios do PRO -->
+                            <StackPanel Margin="0,0,0,20">
+                                <TextBlock Text="⭐ Clientes ativos ilimitados" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource ProBadgeBrush}" Margin="0,0,0,8" />
+                                <TextBlock Text="✓ Sem travamento de cotas de clientes" FontSize="12" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,8" />
+                                <TextBlock Text="✓ Reativação de clientes sem restrições" FontSize="12" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,8" />
+                                <TextBlock Text="✓ Gestão avançada de cobranças e WhatsApp" FontSize="12" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,8" />
+                                <TextBlock Text="✓ Suporte contínuo a atualizações do sistema" FontSize="12" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,8" />
+                                <TextBlock Text="✓ Todos os recursos do Plano Free inclusos" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                            </StackPanel>
+
+                            <!-- MODALIDADES DE PAGAMENTO DO PRO -->
+                            <TextBlock Text="ESCOLHA SEU PLANO E FORMA DE PAGAMENTO:"
+                                       FontSize="11"
+                                       FontWeight="Bold"
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       Margin="0,0,0,12" />
+
+                            <!-- OPÇÃO 1: PRO MENSAL -->
+                            <Border Background="{DynamicResource SurfaceBrush}"
+                                    BorderBrush="{DynamicResource BorderDarkBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="16"
+                                    Margin="0,0,0,14">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,6">
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                            <TextBlock Text="PRO MENSAL" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                                            <TextBlock Text=" • Acesso mensal contínuo" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="6,0,0,0" />
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding MonthlyPriceText}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                    </Grid>
+
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="10" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <Button Grid.Column="0"
+                                                Content="💳 PAGAR COM CARTÃO"
+                                                Command="{Binding OpenMonthlySubscriptionCommand}"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Height="38"
+                                                FontSize="11"
+                                                FontWeight="Bold" />
+
+                                        <Button Grid.Column="2"
+                                                Content="💠 PAGAR COM PIX"
+                                                Command="{Binding OpenMonthlyPixCommand}"
+                                                Style="{StaticResource PrimaryButtonStyle}"
+                                                Height="38"
+                                                FontSize="11"
+                                                FontWeight="Bold" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- OPÇÃO 2: PRO ANUAL -->
+                            <Border Background="#201912"
+                                    BorderBrush="{DynamicResource ProBadgeBrush}"
+                                    BorderThickness="1.5"
+                                    CornerRadius="8"
+                                    Padding="16">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,6">
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                            <TextBlock Text="PRO ANUAL" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource ProBadgeBrush}" />
+                                            <Border Background="#78350F" CornerRadius="4" Padding="6,2" Margin="8,0,0,0" VerticalAlignment="Center">
+                                                <TextBlock Text="MAIOR ECONOMIA" FontSize="9" FontWeight="Bold" Foreground="#FDE68A" />
+                                            </Border>
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding AnnualPriceText}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource ProBadgeBrush}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                    </Grid>
+
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="10" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <Button Grid.Column="0"
+                                                Content="💳 PAGAR COM CARTÃO"
+                                                Command="{Binding OpenAnnualSubscriptionCommand}"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Height="38"
+                                                FontSize="11"
+                                                FontWeight="Bold" />
+
+                                        <Button Grid.Column="2"
+                                                Content="💠 PAGAR COM PIX"
+                                                Command="{Binding OpenAnnualPixCommand}"
+                                                Style="{StaticResource PrimaryButtonStyle}"
+                                                Height="38"
+                                                FontSize="11"
+                                                FontWeight="Bold" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Grid>
+        </ScrollViewer>
+
+        <!-- ======================================================== -->
+        <!-- MODAL OVERLAY: PAGAMENTO VIA PIX                         -->
+        <!-- ======================================================== -->
+        <Grid Background="#B0000000" Panel.ZIndex="999">
+            <Grid.Style>
+                <Style TargetType="Grid">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsPixModalOpen}" Value="True">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Grid.Style>
+
+            <Border Background="{DynamicResource CardDarkBrush}"
+                    BorderBrush="{DynamicResource ProBadgeBrush}"
+                    BorderThickness="1.5"
+                    CornerRadius="12"
+                    Width="500"
+                    MaxWidth="520"
+                    Padding="26"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <StackPanel>
+                    <!-- Cabeçalho do Modal -->
+                    <Grid Margin="0,0,0,16">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="💠" FontSize="20" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding PixModalTitle}"
+                                       FontSize="16"
+                                       FontWeight="Bold"
+                                       Foreground="{DynamicResource TextPrimaryBrush}"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <Button Content="✕"
+                                Command="{Binding ClosePixModalCommand}"
+                                Style="{StaticResource HeaderActionButtonStyle}"
+                                Width="30"
+                                Height="30"
+                                Padding="0"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                ToolTip="Fechar" />
+                    </Grid>
+
+                    <!-- Banner de Identificação e Valor Fixo -->
+                    <Border Background="{DynamicResource SurfaceBrush}"
+                            BorderBrush="{DynamicResource BorderDarkBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16,12"
+                            Margin="0,0,0,16">
+                        <Grid>
+                            <StackPanel HorizontalAlignment="Left" VerticalAlignment="Center">
+                                <TextBlock Text="PLANO SELECIONADO"
+                                           FontSize="10"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextMutedBrush}" />
+                                <TextBlock Text="{Binding PixModalPlanName}"
+                                           FontSize="14"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource TextPrimaryBrush}"
+                                           Margin="0,2,0,0" />
+                            </StackPanel>
+
+                            <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <TextBlock Text="VALOR FIXO"
+                                           FontSize="10"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           HorizontalAlignment="Right" />
+                                <TextBlock Text="{Binding PixModalAmountFormatted}"
+                                           FontSize="18"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource ProBadgeBrush}"
+                                           HorizontalAlignment="Right"
+                                           Margin="0,2,0,0" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- QR Code Legível -->
+                    <TextBlock Text="Escaneie o QR Code com o aplicativo do seu banco:"
+                               FontSize="12"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,10" />
+
+                    <Border Background="White"
+                            CornerRadius="8"
+                            Padding="12"
+                            HorizontalAlignment="Center"
+                            Margin="0,0,0,16">
+                        <Image Source="{Binding PixModalQrCode}"
+                               Width="180"
+                               Height="180"
+                               Stretch="Uniform"
+                               RenderOptions.BitmapScalingMode="NearestNeighbor" />
+                    </Border>
+
+                    <!-- Campo Pix Copia e Cola -->
+                    <TextBlock Text="Ou utilize o Pix Copia e Cola:"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               Margin="0,0,0,6" />
+
+                    <TextBox Style="{StaticResource InputTextBoxStyle}"
+                             Text="{Binding PixModalPayload, Mode=OneWay}"
+                             IsReadOnly="True"
+                             TextWrapping="Wrap"
+                             MaxHeight="60"
+                             VerticalScrollBarVisibility="Auto"
+                             FontSize="11"
+                             Foreground="{DynamicResource TextSecondaryBrush}"
+                             Margin="0,0,0,12" />
+
+                    <!-- Botão Copiar Pix e Feedback -->
+                    <Button Content="📋 COPIAR PIX"
+                            Command="{Binding CopyPixPayloadCommand}"
+                            Style="{StaticResource PrimaryButtonStyle}"
+                            Height="38"
+                            FontSize="12"
+                            FontWeight="Bold"
+                            HorizontalAlignment="Stretch" />
+
+                    <TextBlock Text="{Binding PixCopyFeedback}"
+                               Foreground="{DynamicResource SuccessBrush}"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               HorizontalAlignment="Center"
+                               Margin="0,8,0,0">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsPixCopied}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
+                    <!-- Instruções e Botão Fechar -->
+                    <TextBlock Text="Abra o app do seu banco, escolha Pix Copia e Cola ou aponte a câmera para o QR Code e confirme o pagamento."
+                               FontSize="11"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               TextWrapping="Wrap"
+                               TextAlignment="Center"
+                               Margin="0,14,0,16" />
+
+                    <Button Content="Fechar"
+                            Command="{Binding ClosePixModalCommand}"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            Height="34"
+                            Padding="20,0"
+                            HorizontalAlignment="Center" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

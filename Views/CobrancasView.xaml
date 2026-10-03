@@ -1,0 +1,1166 @@
+<UserControl x:Class="CobraPix_PC.Views.CobrancasView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:vm="clr-namespace:CobraPix_PC.ViewModels"
+             mc:Ignorable="d" 
+             d:DesignHeight="750" d:DesignWidth="1100"
+             d:DataContext="{d:DesignInstance Type=vm:CobrancasViewModel}">
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <!-- 0. Cabeçalho -->
+            <RowDefinition Height="Auto" />
+            <!-- 1. Card Específico: 5º Dia Útil -->
+            <RowDefinition Height="Auto" />
+            <!-- 2. Cards de Métricas do Resumo -->
+            <RowDefinition Height="Auto" />
+            <!-- 3. Filtros e Pesquisa -->
+            <RowDefinition Height="Auto" />
+            <!-- 4. Tabela e Detalhes -->
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- ======================================================== -->
+        <!-- 0. CABEÇALHO DO MÓDULO                                   -->
+        <!-- ======================================================== -->
+        <Grid Grid.Row="0" Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="💬" FontSize="20" Margin="0,0,8,0" VerticalAlignment="Center" />
+                    <TextBlock Text="Central de Cobranças"
+                               FontSize="20"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+                <TextBlock Text="Central de acompanhamento para clientes em atraso, vencimentos preventivos e regra estratégica do 5º dia útil."
+                           FontSize="12"
+                           Foreground="{DynamicResource TextSecondaryBrush}"
+                           Margin="0,4,0,0" />
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <Border Background="{DynamicResource CardDarkBrush}"
+                        BorderBrush="{DynamicResource BorderDarkBrush}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="14,8">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Total para Cobrar: "
+                                   FontSize="12"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding FormattedTotalParaCobrar}"
+                                   FontSize="14"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource AccentBrush}"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Grid>
+
+        <!-- ======================================================== -->
+        <!-- 1. SEÇÃO / CARD DE DESTAQUE: 5º DIA ÚTIL                 -->
+        <!-- ======================================================== -->
+        <Border Grid.Row="1"
+                Background="#0F1F33"
+                BorderBrush="#1E3E66"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="16,12"
+                Margin="0,0,0,16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="16" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Ícone e Identificador -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Background="#163252"
+                            CornerRadius="6"
+                            Width="38" Height="38">
+                        <TextBlock Text="💼" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="5º DIA ÚTIL DO MÊS" FontSize="11" FontWeight="Bold" Foreground="#38BDF8" />
+                        <TextBlock Text="{Binding ProximoQuintoDiaUtilText}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,2,0,0" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Status Descritivo -->
+                <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="16,0">
+                    <StackPanel Orientation="Horizontal">
+                        <Border Background="#143452"
+                                BorderBrush="#255580"
+                                BorderThickness="1"
+                                CornerRadius="4"
+                                Padding="8,2"
+                                Margin="0,0,8,0">
+                            <TextBlock Text="{Binding FifthBusinessDayStatusText}"
+                                       FontSize="11"
+                                       FontWeight="Bold"
+                                       Foreground="{DynamicResource AccentBrush}" />
+                        </Border>
+                        <TextBlock Text="{Binding FifthBusinessDayObligationsCount, StringFormat='{}{0} obrigações/clientes vinculados a este ciclo'}"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Text="Segunda a sexta-feira são considerados dias úteis. Sábados e domingos não contam."
+                               FontSize="11"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               Margin="0,3,0,0" />
+                </StackPanel>
+
+                <!-- Atalho de Filtro 5º Dia Útil -->
+                <Button Grid.Column="3"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        Command="{Binding SetFilterCommand}"
+                        CommandParameter="FifthBusinessDay"
+                        Padding="14,0"
+                        Height="32"
+                        VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Filtrar 5º Dia Útil" FontSize="12" VerticalAlignment="Center" />
+                        <TextBlock Text=" →" FontSize="12" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" Margin="4,0,0,0" />
+                    </StackPanel>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- ======================================================== -->
+        <!-- 2. CARDS DE MÉTRICAS DO RESUMO (6 CARDS)                 -->
+        <!-- ======================================================== -->
+        <Grid Grid.Row="2" Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Card 1: Total para Cobrar -->
+            <Border Grid.Column="0"
+                    Background="{DynamicResource CardDarkBrush}"
+                    BorderBrush="{DynamicResource BorderDarkBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="12,12">
+                <StackPanel>
+                    <TextBlock Text="TOTAL PARA COBRAR" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" />
+                    <TextBlock Text="{Binding FormattedTotalParaCobrar}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,4,0,0" />
+                    <TextBlock Text="Em aberto e a vencer" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0" />
+                </StackPanel>
+            </Border>
+
+            <!-- Card 2: Total em Atraso -->
+            <Border Grid.Column="2"
+                    Background="{DynamicResource CardDarkBrush}"
+                    BorderBrush="{DynamicResource BorderDarkBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="12,12">
+                <StackPanel>
+                    <TextBlock Text="TOTAL EM ATRASO" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" />
+                    <TextBlock Text="{Binding FormattedTotalEmAtraso}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource DangerBrush}" Margin="0,4,0,0" />
+                    <TextBlock Text="Vencimento ultrapassado" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0" />
+                </StackPanel>
+            </Border>
+
+            <!-- Card 3: Parcelas Atrasadas -->
+            <Border Grid.Column="4"
+                    Background="{DynamicResource CardDarkBrush}"
+                    BorderBrush="{DynamicResource BorderDarkBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="12,12">
+                <StackPanel>
+                    <TextBlock Text="PARCELAS ATRASADAS" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" />
+                    <TextBlock Text="{Binding ParcelasAtrasadasCount}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,4,0,0" />
+                    <TextBlock Text="De vendas a prazo" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0" />
+                </StackPanel>
+            </Border>
+
+            <!-- Card 4: Mensalidades Atrasadas -->
+            <Border Grid.Column="6"
+                    Background="{DynamicResource CardDarkBrush}"
+                    BorderBrush="{DynamicResource BorderDarkBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="12,12">
+                <StackPanel>
+                    <TextBlock Text="MENSALIDADES ATRASADAS" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" />
+                    <TextBlock Text="{Binding MensalidadesAtrasadasCount}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,4,0,0" />
+                    <TextBlock Text="De mensalistas ativos" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0" />
+                </StackPanel>
+            </Border>
+
+            <!-- Card 5: Clientes Envolvidos -->
+            <Border Grid.Column="8"
+                    Background="{DynamicResource CardDarkBrush}"
+                    BorderBrush="{DynamicResource BorderDarkBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="12,12">
+                <StackPanel>
+                    <TextBlock Text="CLIENTES ENVOLVIDOS" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" />
+                    <TextBlock Text="{Binding ClientesEnvolvidosCount}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,4,0,0" />
+                    <TextBlock Text="Clientes com cobrança" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0" />
+                </StackPanel>
+            </Border>
+
+            <!-- Card 6: Próximo 5º Dia Útil -->
+            <Border Grid.Column="10"
+                    Background="{DynamicResource CardDarkBrush}"
+                    BorderBrush="{DynamicResource BorderDarkBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="12,12">
+                <StackPanel>
+                    <TextBlock Text="PRÓXIMO 5º DIA ÚTIL" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" />
+                    <TextBlock Text="{Binding ProximoQuintoDiaUtilText}" FontSize="16" FontWeight="Bold" Foreground="#38BDF8" Margin="0,4,0,0" />
+                    <TextBlock Text="{Binding FifthBusinessDayStatusText}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0" />
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- ======================================================== -->
+        <!-- 3. BARRA DE PESQUISA E FILTROS SEGMENTADOS               -->
+        <!-- ======================================================== -->
+        <Border Grid.Row="3"
+                Background="{DynamicResource CardDarkBrush}"
+                BorderBrush="{DynamicResource BorderDarkBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="12"
+                Margin="0,0,0,16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="16" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Campo de Pesquisa -->
+                <Grid Grid.Column="0">
+                    <TextBox Style="{StaticResource InputTextBoxStyle}"
+                             Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                             Padding="32,7,28,7"
+                             VerticalContentAlignment="Center" />
+
+                    <TextBlock Text="🔍"
+                               FontSize="12"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               HorizontalAlignment="Left"
+                               VerticalAlignment="Center"
+                               Margin="10,0,0,0"
+                               IsHitTestVisible="False" />
+
+                    <TextBlock Text="Pesquisar por cliente ou telefone..."
+                               FontSize="13"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               HorizontalAlignment="Left"
+                               VerticalAlignment="Center"
+                               Margin="34,0,0,0"
+                               IsHitTestVisible="False">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasSearchText}" Value="False">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
+                    <!-- Botão Limpar Busca -->
+                    <Button Command="{Binding ClearSearchCommand}"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Margin="0,0,8,0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Cursor="Hand">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasSearchText}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <TextBlock Text="✕" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" />
+                    </Button>
+                </Grid>
+
+                <!-- Barra de 6 Filtros Segmentados -->
+                <Border Grid.Column="2"
+                        Background="{DynamicResource SurfaceBrush}"
+                        BorderBrush="{DynamicResource BorderDarkBrush}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="3">
+                    <StackPanel Orientation="Horizontal">
+                        <!-- Todas -->
+                        <Button Command="{Binding SetFilterCommand}"
+                                CommandParameter="All"
+                                Height="30" Padding="12,0" BorderThickness="0" Cursor="Hand">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="Transparent" />
+                                    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsFilterAll}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource CardHoverBrush}" />
+                                            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <TextBlock Text="Todas" VerticalAlignment="Center" />
+                        </Button>
+
+                        <!-- Parcelas -->
+                        <Button Command="{Binding SetFilterCommand}"
+                                CommandParameter="Parcelas"
+                                Height="30" Padding="12,0" BorderThickness="0" Cursor="Hand">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="Transparent" />
+                                    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsFilterParcelas}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource CardHoverBrush}" />
+                                            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <TextBlock Text="Parcelas" VerticalAlignment="Center" />
+                        </Button>
+
+                        <!-- Mensalidades -->
+                        <Button Command="{Binding SetFilterCommand}"
+                                CommandParameter="Mensalidades"
+                                Height="30" Padding="12,0" BorderThickness="0" Cursor="Hand">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="Transparent" />
+                                    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsFilterMensalidades}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource CardHoverBrush}" />
+                                            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <TextBlock Text="Mensalidades" VerticalAlignment="Center" />
+                        </Button>
+
+                        <!-- 5º Dia Útil -->
+                        <Button Command="{Binding SetFilterCommand}"
+                                CommandParameter="FifthBusinessDay"
+                                Height="30" Padding="12,0" BorderThickness="0" Cursor="Hand">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="Transparent" />
+                                    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsFilterFifthBusinessDay}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource CardHoverBrush}" />
+                                            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <TextBlock Text="5º Dia Útil" VerticalAlignment="Center" />
+                        </Button>
+
+                        <!-- Atrasadas -->
+                        <Button Command="{Binding SetFilterCommand}"
+                                CommandParameter="Atrasadas"
+                                Height="30" Padding="12,0" BorderThickness="0" Cursor="Hand">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="Transparent" />
+                                    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsFilterAtrasadas}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource CardHoverBrush}" />
+                                            <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
+                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <TextBlock Text="Atrasadas" VerticalAlignment="Center" />
+                        </Button>
+
+                        <!-- Vencendo -->
+                        <Button Command="{Binding SetFilterCommand}"
+                                CommandParameter="Vencendo"
+                                Height="30" Padding="12,0" BorderThickness="0" Cursor="Hand">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="Transparent" />
+                                    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsFilterVencendo}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource CardHoverBrush}" />
+                                            <Setter Property="Foreground" Value="{DynamicResource WarningBrush}" />
+                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <TextBlock Text="Vencendo" VerticalAlignment="Center" />
+                        </Button>
+                    </StackPanel>
+                </Border>
+
+                <!-- Botão Recarregar (SecondaryButtonStyle) -->
+                <Button Grid.Column="3"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        Command="{Binding LoadDataCommand}"
+                        ToolTip="Atualizar cobranças"
+                        Margin="8,0,0,0"
+                        Width="36" Height="34" Padding="0">
+                    <TextBlock Text="🔄" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- ======================================================== -->
+        <!-- 4. CONTEÚDO PRINCIPAL (TABELA + PAINEL DE DETALHES)      -->
+        <!-- ======================================================== -->
+        <Grid Grid.Row="4">
+            <Grid.ColumnDefinitions>
+                <!-- Tabela de Cobranças -->
+                <ColumnDefinition Width="2.5*" MinWidth="480" />
+                <ColumnDefinition Width="16" />
+                <!-- Painel Lateral de Ações e Detalhes -->
+                <ColumnDefinition Width="1*" MinWidth="280" MaxWidth="380" />
+            </Grid.ColumnDefinitions>
+
+            <!-- TABELA -->
+            <Border Grid.Column="0"
+                    Background="{DynamicResource CardDarkBrush}"
+                    BorderBrush="{DynamicResource BorderDarkBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    ClipToBounds="True">
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                    <Grid MinWidth="785">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="40" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <!-- Cabeçalho das Colunas -->
+                        <Border Grid.Row="0"
+                                Background="{DynamicResource HeaderDarkBrush}"
+                                BorderBrush="{DynamicResource BorderDarkBrush}"
+                                BorderThickness="0,0,0,1"
+                                Padding="16,0">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="2.2*" MinWidth="130" />
+                                    <ColumnDefinition Width="75" />
+                                    <ColumnDefinition Width="1.4*" MinWidth="105" />
+                                    <ColumnDefinition Width="90" />
+                                    <ColumnDefinition Width="80" />
+                                    <ColumnDefinition Width="95" />
+                                    <ColumnDefinition Width="1.3*" MinWidth="100" />
+                                    <ColumnDefinition Width="110" />
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Grid.Column="0" Text="CLIENTE" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <TextBlock Grid.Column="1" Text="TIPO" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <TextBlock Grid.Column="2" Text="REFERÊNCIA" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <TextBlock Grid.Column="3" Text="VENCIMENTO" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <TextBlock Grid.Column="4" Text="ATRASO" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <TextBlock Grid.Column="5" Text="SALDO" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <TextBlock Grid.Column="6" Text="MOTIVO" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <TextBlock Grid.Column="7" Text="AÇÃO" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Lista de Cobranças -->
+                        <ListBox Grid.Row="1"
+                                 ItemsSource="{Binding FilteredCobrancas}"
+                                 SelectedItem="{Binding SelectedCobranca}"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto">
+
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    <Setter Property="Padding" Value="0" />
+                                    <Setter Property="Margin" Value="0" />
+                                    <Setter Property="Cursor" Value="Hand" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ListBoxItem">
+                                                <Border x:Name="itemBorder"
+                                                        Background="Transparent"
+                                                        BorderBrush="{DynamicResource BorderDarkBrush}"
+                                                        BorderThickness="0,0,0,1"
+                                                        Padding="16,11">
+                                                    <ContentPresenter />
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="itemBorder" Property="Background" Value="{DynamicResource CardHoverBrush}" />
+                                                    </Trigger>
+                                                    <Trigger Property="IsSelected" Value="True">
+                                                        <Setter TargetName="itemBorder" Property="Background" Value="{DynamicResource SelectedRowBrush}" />
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+
+                            <ListBox.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:CobrancaItemViewModel}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="2.2*" MinWidth="130" />
+                                            <ColumnDefinition Width="75" />
+                                            <ColumnDefinition Width="1.4*" MinWidth="105" />
+                                            <ColumnDefinition Width="90" />
+                                            <ColumnDefinition Width="80" />
+                                            <ColumnDefinition Width="95" />
+                                            <ColumnDefinition Width="1.3*" MinWidth="100" />
+                                            <ColumnDefinition Width="110" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Cliente -->
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0">
+                                            <TextBlock Text="{Binding ClientName}"
+                                                       FontSize="13"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource TextPrimaryBrush}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       ToolTip="{Binding ClientName}" />
+                                            <TextBlock Text="{Binding ClientPhone}"
+                                                       FontSize="11"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       Margin="0,1,0,0" />
+                                        </StackPanel>
+
+                                        <!-- Tipo -->
+                                        <Border Grid.Column="1"
+                                                Background="{DynamicResource AccentSubtleBrush}"
+                                                BorderBrush="{DynamicResource BorderDarkBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="4"
+                                                Padding="6,3"
+                                                HorizontalAlignment="Left"
+                                                VerticalAlignment="Center"
+                                                Margin="0,0,8,0">
+                                            <TextBlock Text="{Binding TipoBadge}"
+                                                       FontSize="11"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource AccentBrush}" />
+                                        </Border>
+
+                                        <!-- Referência -->
+                                        <TextBlock Grid.Column="2"
+                                                   Text="{Binding Reference}"
+                                                   FontSize="12"
+                                                   Foreground="{DynamicResource TextPrimaryBrush}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding Reference}"
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,8,0" />
+
+                                        <!-- Vencimento -->
+                                        <TextBlock Grid.Column="3"
+                                                   Text="{Binding FormattedDueDate}"
+                                                   FontSize="12"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,8,0" />
+
+                                        <!-- Dias em Atraso (Badge) -->
+                                        <Border Grid.Column="4"
+                                                CornerRadius="4"
+                                                Padding="6,3"
+                                                HorizontalAlignment="Left"
+                                                VerticalAlignment="Center"
+                                                Margin="0,0,8,0">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="#251A14" />
+                                                    <Setter Property="BorderBrush" Value="#4A2F1C" />
+                                                    <Setter Property="BorderThickness" Value="1" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Status}" Value="Atrasada">
+                                                            <Setter Property="Background" Value="#2D1518" />
+                                                            <Setter Property="BorderBrush" Value="#502025" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Status}" Value="Vencendo">
+                                                            <Setter Property="Background" Value="#292212" />
+                                                            <Setter Property="BorderBrush" Value="#4C3A16" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <TextBlock Text="{Binding DaysOverdueText}"
+                                                       FontSize="11"
+                                                       FontWeight="Bold">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="{DynamicResource WarningBrush}" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Status}" Value="Atrasada">
+                                                                <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Status}" Value="Vencendo">
+                                                                <Setter Property="Foreground" Value="{DynamicResource WarningBrush}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Status}" Value="Pendente">
+                                                                <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Border>
+
+                                        <!-- Saldo Devedor -->
+                                        <TextBlock Grid.Column="5"
+                                                   Text="{Binding FormattedRemainingBalance}"
+                                                   FontSize="13"
+                                                   FontWeight="Bold"
+                                                   Foreground="{DynamicResource DangerBrush}"
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,8,0" />
+
+                                        <!-- Motivo e Status -->
+                                        <StackPanel Grid.Column="6" VerticalAlignment="Center" Margin="0,0,8,0">
+                                            <TextBlock Text="{Binding Motivo}"
+                                                       FontSize="11"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource TextPrimaryBrush}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       ToolTip="{Binding Motivo}" />
+                                            <TextBlock Text="{Binding StatusBadge}"
+                                                       FontSize="11"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       Margin="0,1,0,0" />
+                                        </StackPanel>
+
+                                        <!-- Botões de Ação -->
+                                        <StackPanel Grid.Column="7" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                            <Button Style="{DynamicResource SecondaryButtonStyle}"
+                                                    Command="{Binding DataContext.OpenWhatsAppCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}"
+                                                    ToolTip="Conversar no WhatsApp"
+                                                    Padding="0"
+                                                    Width="28" Height="28"
+                                                    Margin="0,0,6,0">
+                                                <TextBlock Text="💬" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Button>
+
+                                            <Button Style="{DynamicResource PrimaryButtonStyle}"
+                                                    Command="{Binding DataContext.ExecuteItemActionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}"
+                                                    Padding="8,4"
+                                                    Height="28">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding ActionButtonIcon}" FontSize="10" Margin="0,0,4,0" VerticalAlignment="Center" />
+                                                    <TextBlock Text="{Binding ActionButtonText}" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                </StackPanel>
+                                            </Button>
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                    <!-- Estado Vazio / Sem Cobranças -->
+                    <Border Grid.Row="1"
+                            Background="Transparent"
+                            IsHitTestVisible="False">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsEmpty}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsSearchEmpty}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+
+                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,40">
+                            <TextBlock Text="🎉" FontSize="36" HorizontalAlignment="Center" Opacity="0.8" />
+                            <TextBlock Text="Nenhuma cobrança pendente!"
+                                       FontSize="16"
+                                       FontWeight="Bold"
+                                       Foreground="{DynamicResource TextPrimaryBrush}"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,12,0,4" />
+                            <TextBlock Text="Todas as parcelas e mensalidades estão em dia para o filtro selecionado."
+                                       FontSize="12"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                       HorizontalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+                    </Grid>
+                </ScrollViewer>
+            </Border>
+
+            <!-- PAINEL LATERAL DE DETALHES -->
+            <Border Grid.Column="2"
+                    Background="{DynamicResource CardDarkBrush}"
+                    BorderBrush="{DynamicResource BorderDarkBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="16,16,8,16">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,8,0">
+                    <Grid>
+                    <!-- Quando há item selecionado -->
+                    <StackPanel>
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasSelectedCobranca}" Value="False">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+
+                        <TextBlock Text="DETALHES DA COBRANÇA"
+                                   FontSize="11"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   Margin="0,0,0,16" />
+
+                        <!-- Cabeçalho do Cliente -->
+                        <Border Background="{DynamicResource SurfaceBrush}"
+                                BorderBrush="{DynamicResource BorderDarkBrush}"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="12"
+                                Margin="0,0,0,16">
+                            <StackPanel>
+                                <TextBlock Text="{Binding SelectedCobranca.ClientName}"
+                                           FontSize="15"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource TextPrimaryBrush}" />
+                                <TextBlock Text="{Binding SelectedCobranca.ClientPhone}"
+                                           FontSize="12"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                           Margin="0,2,0,0" />
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Border Background="{DynamicResource CardDarkBrush}"
+                                            BorderBrush="{DynamicResource BorderDarkBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="4"
+                                            Padding="6,3"
+                                            Margin="0,0,6,0">
+                                        <TextBlock Text="{Binding SelectedCobranca.TipoBadge}"
+                                                   FontSize="11"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource AccentBrush}" />
+                                    </Border>
+                                    <Border Background="#251C1A"
+                                            BorderBrush="{DynamicResource BorderDarkBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="4"
+                                            Padding="6,3">
+                                        <TextBlock Text="{Binding SelectedCobranca.StatusBadge}"
+                                                   FontSize="11"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource WarningBrush}" />
+                                    </Border>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Informações da Cobrança -->
+                        <Grid Margin="0,0,0,8">
+                            <TextBlock Text="Motivo:" FontSize="12" Foreground="{DynamicResource TextMutedBrush}" />
+                            <TextBlock Text="{Binding SelectedCobranca.Motivo}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Right" />
+                        </Grid>
+
+                        <Grid Margin="0,0,0,8">
+                            <TextBlock Text="Referência:" FontSize="12" Foreground="{DynamicResource TextMutedBrush}" />
+                            <TextBlock Text="{Binding SelectedCobranca.Reference}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Right" />
+                        </Grid>
+
+                        <Grid Margin="0,0,0,8">
+                            <TextBlock Text="Vencimento:" FontSize="12" Foreground="{DynamicResource TextMutedBrush}" />
+                            <TextBlock Text="{Binding SelectedCobranca.FormattedDueDate}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Right" />
+                        </Grid>
+
+                        <Grid Margin="0,0,0,8">
+                            <TextBlock Text="Situação:" FontSize="12" Foreground="{DynamicResource TextMutedBrush}" />
+                            <TextBlock Text="{Binding SelectedCobranca.DaysOverdueText}" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource DangerBrush}" HorizontalAlignment="Right" />
+                        </Grid>
+
+                        <Border Background="{DynamicResource BorderDarkBrush}" Height="1" Margin="0,12" />
+
+                        <!-- Valores Financeiros -->
+                        <Grid Margin="0,0,0,8">
+                            <TextBlock Text="Valor Original:" FontSize="12" Foreground="{DynamicResource TextMutedBrush}" />
+                            <TextBlock Text="{Binding SelectedCobranca.FormattedOriginalAmount}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Right" />
+                        </Grid>
+
+                        <Grid Margin="0,0,0,8">
+                            <TextBlock Text="Total Pago:" FontSize="12" Foreground="{DynamicResource TextMutedBrush}" />
+                            <TextBlock Text="{Binding SelectedCobranca.FormattedTotalPaid}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Right" />
+                        </Grid>
+
+                        <Grid Margin="0,0,0,16">
+                            <TextBlock Text="Saldo Devedor:" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource DangerBrush}" />
+                            <TextBlock Text="{Binding SelectedCobranca.FormattedRemainingBalance}" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource DangerBrush}" HorizontalAlignment="Right" />
+                        </Grid>
+
+                        <!-- Botão Principal de Ação -->
+                        <Button Style="{StaticResource PrimaryButtonStyle}"
+                                Command="{Binding ExecuteItemActionCommand}"
+                                CommandParameter="{Binding SelectedCobranca}"
+                                Height="40"
+                                Margin="0,0,0,12">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding SelectedCobranca.ActionButtonIcon}" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding SelectedCobranca.ActionButtonText, StringFormat='{}Ir para {0}'}" FontSize="13" FontWeight="Bold" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+
+                        <!-- Botão de Ação WhatsApp (Fase 10) -->
+                        <Button Command="{Binding OpenWhatsAppCommand}"
+                                CommandParameter="{Binding SelectedCobranca}"
+                                Height="40"
+                                Margin="0,0,0,10">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource PrimaryButtonStyle}">
+                                    <Setter Property="Background" Value="#15803D" />
+                                    <Style.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="#16A34A" />
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="💬" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                <TextBlock Text="Abrir no WhatsApp" FontSize="13" FontWeight="Bold" Foreground="#FFFFFF" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+
+                    <!-- Quando não há item selecionado -->
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasSelectedCobranca}" Value="False">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+
+                        <TextBlock Text="👈" FontSize="28" HorizontalAlignment="Center" Opacity="0.5" />
+                        <TextBlock Text="Selecione uma cobrança"
+                                   FontSize="14"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,8,0,0" />
+                        <TextBlock Text="Clique em um item da lista para visualizar os detalhes e agir."
+                                   FontSize="11"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   HorizontalAlignment="Center"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   Margin="0,4,0,0" />
+                    </StackPanel>
+                </Grid>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+
+        <!-- ======================================================== -->
+        <!-- 5. MODAL / OVERLAY: PRÉ-VISUALIZAÇÃO DO WHATSAPP         -->
+        <!-- ======================================================== -->
+        <Grid Grid.Row="0" Grid.RowSpan="5" Margin="-24">
+            <Grid.Style>
+                <Style TargetType="Grid">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding WhatsAppPreview.IsOpen}" Value="True">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Grid.Style>
+
+            <!-- Backdrop Escuro -->
+            <Border Background="#C0080C14" />
+
+            <!-- Card Central -->
+            <Border Width="520"
+                    Background="{DynamicResource CardDarkBrush}"
+                    BorderBrush="{DynamicResource BorderDarkBrush}"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="24"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <StackPanel>
+                    <!-- Header do Modal -->
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="💬" FontSize="18" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                <TextBlock Text="Pré-visualização do WhatsApp"
+                                           FontSize="17"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource TextPrimaryBrush}"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+                            <TextBlock Text="Revise a mensagem antes de abrir a conversa no WhatsApp."
+                                       FontSize="12"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                       Margin="0,3,0,0" />
+                        </StackPanel>
+
+                        <Button Grid.Column="1"
+                                Command="{Binding WhatsAppPreview.CancelCommand}"
+                                Content="✕"
+                                FontSize="14"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Foreground="{DynamicResource TextSecondaryBrush}"
+                                Cursor="Hand" />
+                    </Grid>
+
+                    <!-- Alerta de Erro (Telefone inválido ou falha ao abrir) -->
+                    <Border Background="#381818"
+                            BorderBrush="#7F2525"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="10"
+                            Margin="0,0,0,14">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding WhatsAppPreview.HasError}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="⚠️" FontSize="12" Margin="0,0,6,0" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding WhatsAppPreview.ErrorMessage}"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"
+                                       Foreground="#FFA8A8"
+                                       VerticalAlignment="Center"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Dados do Cliente e Cobrança -->
+                    <Border Background="{DynamicResource SurfaceBrush}"
+                            BorderBrush="{DynamicResource BorderDarkBrush}"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="12"
+                            Margin="0,0,0,14">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{Binding WhatsAppPreview.ClientName}"
+                                           FontSize="14"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource TextPrimaryBrush}" />
+                                <TextBlock Text="{Binding WhatsAppPreview.ClientPhone}"
+                                           FontSize="12"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                           Margin="0,2,0,0" />
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding WhatsAppPreview.Tipo}"
+                                           FontSize="11"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource AccentBrush}"
+                                           HorizontalAlignment="Right" />
+                                <TextBlock Text="{Binding WhatsAppPreview.Amount}"
+                                           FontSize="13"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource DangerBrush}"
+                                           HorizontalAlignment="Right"
+                                           Margin="0,2,0,0" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- Campo de Edição da Mensagem -->
+                    <TextBlock Text="MENSAGEM (EDITÁVEL):"
+                               FontSize="11"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               Margin="0,0,0,6" />
+
+                    <TextBox Text="{Binding WhatsAppPreview.Message, UpdateSourceTrigger=PropertyChanged}"
+                             Style="{StaticResource InputTextBoxStyle}"
+                             AcceptsReturn="True"
+                             TextWrapping="Wrap"
+                             Height="130"
+                             VerticalScrollBarVisibility="Auto"
+                             Margin="0,0,0,12" />
+
+                    <TextBlock Text="ℹ️ O CobraPix PC abrirá o WhatsApp com esta mensagem pré-preenchida. A mensagem não é enviada automaticamente."
+                               FontSize="11"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               TextWrapping="Wrap"
+                               Margin="0,0,0,18" />
+
+                    <!-- Botões de Ação -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Command="{Binding WhatsAppPreview.CancelCommand}"
+                                Content="CANCELAR" />
+
+                        <Button Grid.Column="2"
+                                Command="{Binding WhatsAppPreview.ConfirmCommand}"
+                                Height="36"
+                                Cursor="Hand">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource PrimaryButtonStyle}">
+                                    <Setter Property="Background" Value="#25D366" />
+                                    <Style.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="#22C55E" />
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="💬" FontSize="13" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                <TextBlock Text="ABRIR WHATSAPP" FontSize="12" FontWeight="Bold" Foreground="#0A111A" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

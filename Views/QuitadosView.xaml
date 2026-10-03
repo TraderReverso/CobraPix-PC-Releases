@@ -1,0 +1,482 @@
+<UserControl x:Class="CobraPix_PC.Views.QuitadosView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:vmm="clr-namespace:CobraPix_PC.ViewModels.Modules"
+             mc:Ignorable="d" 
+             d:DesignHeight="700" d:DesignWidth="1100"
+             d:DataContext="{d:DesignInstance Type=vmm:QuitadosViewModel}">
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <!-- 0. Header -->
+            <RowDefinition Height="Auto" />
+            <!-- 1. Alertas / Erro -->
+            <RowDefinition Height="Auto" />
+            <!-- 2. Barra de Busca e Ações -->
+            <RowDefinition Height="Auto" />
+            <!-- 3. Lista de Clientes Quitados -->
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- ======================================================== -->
+        <!-- 0. CABEÇALHO DO MÓDULO                                   -->
+        <!-- ======================================================== -->
+        <Grid Grid.Row="0" Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="✅" FontSize="20" Margin="0,0,8,0" VerticalAlignment="Center" />
+                    <TextBlock Text="Clientes Quitados"
+                               FontSize="20"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+                <TextBlock Text="Clientes com 100% das compras liquidadas, sem parcelas pendentes e sem mensalidades ativas. Não consomem o limite do plano FREE."
+                           FontSize="12"
+                           Foreground="{DynamicResource TextSecondaryBrush}"
+                           Margin="0,4,0,0" />
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <Border Background="{DynamicResource CardDarkBrush}"
+                        BorderBrush="{DynamicResource BorderDarkBrush}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="14,8"
+                        Margin="0,0,8,0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Total Quitado: "
+                                   FontSize="12"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding FormattedTotalQuitadosAmount}"
+                                   FontSize="14"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource SuccessBrush}"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+
+                <Border Background="{DynamicResource CardDarkBrush}"
+                        BorderBrush="{DynamicResource BorderDarkBrush}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="14,8">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Clientes: "
+                                   FontSize="12"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding TotalQuitadosCount}"
+                                   FontSize="14"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource TextPrimaryBrush}"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Grid>
+
+        <!-- ======================================================== -->
+        <!-- 1. ALERTAS / ERRO                                        -->
+        <!-- ======================================================== -->
+        <Border Grid.Row="1"
+                Background="{DynamicResource TagNeutralBgBrush}"
+                BorderBrush="{DynamicResource DangerBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="14,10"
+                Margin="0,0,0,14">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding HasError}" Value="True">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <TextBlock Text="{Binding ErrorMessage}"
+                       Foreground="{DynamicResource DangerBrush}"
+                       FontSize="12"
+                       FontWeight="SemiBold" />
+        </Border>
+
+        <!-- ======================================================== -->
+        <!-- 2. BARRA DE BUSCA E ATUALIZAÇÃO                          -->
+        <!-- ======================================================== -->
+        <Border Grid.Row="2"
+                Background="{DynamicResource CardDarkBrush}"
+                BorderBrush="{DynamicResource BorderDarkBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="14,10"
+                Margin="0,0,0,16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Campo de Pesquisa -->
+                <Grid Grid.Column="0" Margin="0,0,12,0">
+                    <TextBox Style="{StaticResource InputTextBoxStyle}"
+                             Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                             Padding="32,7,28,7"
+                             VerticalContentAlignment="Center" />
+
+                    <TextBlock Text="🔍"
+                               FontSize="12"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               HorizontalAlignment="Left"
+                               VerticalAlignment="Center"
+                               Margin="10,0,0,0"
+                               IsHitTestVisible="False" />
+
+                    <TextBlock Text="Pesquisar cliente quitado por nome ou telefone..."
+                               FontSize="12"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               HorizontalAlignment="Left"
+                               VerticalAlignment="Center"
+                               Margin="34,0,0,0"
+                               IsHitTestVisible="False">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasSearchText}" Value="False">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
+                    <Button Command="{Binding ClearSearchCommand}"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Foreground="{DynamicResource TextMutedBrush}"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Margin="0,0,8,0"
+                            Cursor="Hand"
+                            Content="✕"
+                            FontSize="12">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasSearchText}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </Grid>
+
+                <!-- Botão Recarregar -->
+                <Button Grid.Column="1"
+                        Content="Recarregar 🔄"
+                        Command="{Binding LoadQuitadosCommand}"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        Padding="12,6"
+                        FontSize="12" />
+            </Grid>
+        </Border>
+
+        <!-- ======================================================== -->
+        <!-- 3. LISTAGEM DE CLIENTES QUITADOS                         -->
+        <!-- ======================================================== -->
+        <Border Grid.Row="3"
+                Background="{DynamicResource CardDarkBrush}"
+                BorderBrush="{DynamicResource BorderDarkBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="16">
+            <Grid>
+                <!-- Estado Vazio (Sem Quitados) -->
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsEmpty}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <TextBlock Text="✅" FontSize="40" HorizontalAlignment="Center" Margin="0,0,0,10" />
+                    <TextBlock Text="Nenhum cliente quitado no momento"
+                               FontSize="16"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               HorizontalAlignment="Center" />
+                    <TextBlock Text="Clientes aparecem aqui automaticamente quando liquidam integralmente todas as parcelas e não possuem dívidas ativas."
+                               FontSize="12"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
+                               HorizontalAlignment="Center"
+                               Margin="0,4,0,0" />
+                </StackPanel>
+
+                <!-- Estado Vazio (Busca Sem Resultados) -->
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsSearchEmpty}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <TextBlock Text="🔍" FontSize="36" HorizontalAlignment="Center" Margin="0,0,0,10" />
+                    <TextBlock Text="Nenhum cliente quitado encontrado"
+                               FontSize="15"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               HorizontalAlignment="Center" />
+                    <TextBlock Text="Verifique os termos digitados ou limpe a barra de pesquisa."
+                               FontSize="12"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
+                               HorizontalAlignment="Center"
+                               Margin="0,4,0,12" />
+                    <Button Content="Limpar Pesquisa"
+                            Command="{Binding ClearSearchCommand}"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            HorizontalAlignment="Center"
+                            Padding="12,6"
+                            FontSize="12" />
+                </StackPanel>
+
+                <!-- Tabela de Dados -->
+                <DataGrid ItemsSource="{Binding FilteredQuitados}"
+                          SelectedItem="{Binding SelectedQuitado}"
+                          AutoGenerateColumns="False"
+                          IsReadOnly="True"
+                          SelectionMode="Single"
+                          Background="Transparent"
+                          BorderThickness="0"
+                          GridLinesVisibility="Horizontal"
+                          HorizontalGridLinesBrush="{DynamicResource BorderDarkBrush}"
+                          RowBackground="Transparent"
+                          AlternatingRowBackground="{DynamicResource TableAltRowBrush}"
+                          HeadersVisibility="Column"
+                          ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                          ScrollViewer.VerticalScrollBarVisibility="Auto">
+                    <DataGrid.Style>
+                        <Style TargetType="DataGrid">
+                            <Setter Property="Visibility" Value="Visible" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsEmpty}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsSearchEmpty}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGrid.Style>
+
+                    <DataGrid.ColumnHeaderStyle>
+                        <Style TargetType="DataGridColumnHeader">
+                            <Setter Property="Background" Value="{DynamicResource HeaderDarkBrush}" />
+                            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+                            <Setter Property="FontWeight" Value="SemiBold" />
+                            <Setter Property="FontSize" Value="11" />
+                            <Setter Property="Padding" Value="12,8" />
+                            <Setter Property="BorderThickness" Value="0,0,0,1" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource BorderDarkBrush}" />
+                        </Style>
+                    </DataGrid.ColumnHeaderStyle>
+
+                    <DataGrid.RowStyle>
+                        <Style TargetType="DataGridRow">
+                            <Setter Property="Padding" Value="0,4" />
+                            <Setter Property="Cursor" Value="Hand" />
+                            <Style.Triggers>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource SelectedRowBrush}" />
+                                    <Setter Property="BorderBrush" Value="{DynamicResource AccentDarkBrush}" />
+                                </Trigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource CardHoverBrush}" />
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGrid.RowStyle>
+
+                    <DataGrid.Columns>
+                        <!-- Cliente -->
+                        <DataGridTemplateColumn Header="CLIENTE" Width="2*">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="12,6">
+                                        <TextBlock Text="{Binding ClientName}"
+                                                   FontWeight="SemiBold"
+                                                   FontSize="13"
+                                                   Foreground="{DynamicResource TextPrimaryBrush}" />
+                                        <TextBlock Text="{Binding FormattedPhone}"
+                                                   FontSize="11"
+                                                   Foreground="{DynamicResource TextMutedBrush}"
+                                                   Margin="0,2,0,0" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- Qtd Vendas Quitadas -->
+                        <DataGridTemplateColumn Header="VENDAS QUITADAS" Width="1.2*">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="12,6" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding QuitadasSalesCount, StringFormat='{}{0} compras'}"
+                                                   FontSize="12"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource TextPrimaryBrush}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- Total Liquidado -->
+                        <DataGridTemplateColumn Header="TOTAL QUITADO" Width="1.3*">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="12,6" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding FormattedTotalQuitadoAmount}"
+                                                   FontSize="13"
+                                                   FontWeight="Bold"
+                                                   Foreground="{DynamicResource SuccessBrush}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- Última Compra -->
+                        <DataGridTemplateColumn Header="ÚLTIMA COMPRA" Width="1.2*">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="12,6" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding FormattedLastSaleDate}"
+                                                   FontSize="12"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- Situação -->
+                        <DataGridTemplateColumn Header="SITUAÇÃO" Width="1.1*">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Border Background="{DynamicResource TagNeutralBgBrush}"
+                                            BorderBrush="{DynamicResource SuccessBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="4"
+                                            Padding="8,3"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Center"
+                                            Margin="12,6">
+                                        <TextBlock Text="{Binding StatusText}"
+                                                   FontSize="10"
+                                                   FontWeight="Bold"
+                                                   Foreground="{DynamicResource SuccessBrush}" />
+                                    </Border>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- Ações -->
+                        <DataGridTemplateColumn Header="AÇÕES" Width="1.8*">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Margin="8,6" VerticalAlignment="Center">
+                                        <!-- Nova Venda -->
+                                        <Button Content="🛒 Nova Venda"
+                                                Command="{Binding DataContext.StartNewSaleCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"
+                                                Style="{StaticResource ActionSecondaryButtonStyle}"
+                                                FontSize="11"
+                                                Padding="8,4"
+                                                Margin="0,0,6,0" />
+
+                                        <!-- Arquivar -->
+                                        <Button Content="📁 Arquivar"
+                                                Command="{Binding DataContext.ArchiveSelectedCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"
+                                                Style="{StaticResource ActionSecondaryButtonStyle}"
+                                                FontSize="11"
+                                                Padding="8,4" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Border>
+
+        <!-- ======================================================== -->
+        <!-- DIÁLOGO MODAL DE CONFIRMAÇÃO DE ARQUIVAMENTO             -->
+        <!-- ======================================================== -->
+        <Grid Grid.Row="0" Grid.RowSpan="4"
+              Background="#B0000000">
+            <Grid.Style>
+                <Style TargetType="Grid">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsConfirmOpen}" Value="True">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Grid.Style>
+
+            <Border Background="{DynamicResource CardDarkBrush}"
+                    BorderBrush="{DynamicResource BorderDarkBrush}"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Width="460"
+                    Padding="24"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <StackPanel>
+                    <TextBlock Text="{Binding ConfirmTitle}"
+                               FontSize="16"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               Margin="0,0,0,12" />
+
+                    <TextBlock Text="{Binding ConfirmMessage}"
+                               FontSize="13"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
+                               TextWrapping="Wrap"
+                               Margin="0,0,0,20" />
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="Cancelar"
+                                Command="{Binding CancelDialogCommand}"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Margin="0,0,10,0"
+                                Padding="14,7" />
+                        <Button Content="Confirmar Arquivamento"
+                                Command="{Binding ConfirmDialogCommand}"
+                                Style="{StaticResource PrimaryButtonStyle}"
+                                Padding="16,7" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

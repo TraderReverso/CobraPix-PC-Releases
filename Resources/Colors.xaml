@@ -1,0 +1,92 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- ========================================================================= -->
+    <!-- TEMA ESCURO COBRAPIX PC (Inspirado na estética visual de Solo Leveling)   -->
+    <!-- Grafite tecnológico, contraste nítido, ciano vibrante e aura sutil índigo -->
+    <!-- ========================================================================= -->
+
+    <!-- Cores de Superfície e Fundo -->
+    <Color x:Key="BgDarkColor">#0A0E17</Color>
+    <Color x:Key="SidebarDarkColor">#0F1523</Color>
+    <Color x:Key="HeaderDarkColor">#121828</Color>
+    <Color x:Key="CardDarkColor">#151D2D</Color>
+    <Color x:Key="CardHoverColor">#1C273C</Color>
+    <Color x:Key="BorderDarkColor">#223048</Color>
+    <Color x:Key="BorderLightColor">#344666</Color>
+    <Color x:Key="BorderSubtleColor">#182234</Color>
+    <Color x:Key="TableAltRowColor">#0D121F</Color>
+    <Color x:Key="SelectedRowColor">#1C283E</Color>
+    <Color x:Key="InputBgColor">#0D121D</Color>
+    <Color x:Key="SurfaceColor">#101726</Color>
+
+    <!-- Destaque Tecnológico (Ciano Neon / Mana do Sistema) -->
+    <Color x:Key="AccentColor">#00D2FF</Color>
+    <Color x:Key="AccentDarkColor">#0284C7</Color>
+    <Color x:Key="AccentHoverColor">#38BDF8</Color>
+    <Color x:Key="AccentSubtleColor">#1800D2FF</Color>
+
+    <!-- Aura Tecnológica Índigo / Sombra Sutil -->
+    <Color x:Key="AuraPurpleColor">#818CF8</Color>
+    <Color x:Key="AuraPurpleDarkColor">#1E1B4B</Color>
+
+    <!-- Cores de Estado e Tags -->
+    <Color x:Key="SuccessColor">#10B981</Color>
+    <Color x:Key="WarningColor">#F59E0B</Color>
+    <Color x:Key="DangerColor">#EF4444</Color>
+    <Color x:Key="ProBadgeColor">#FFB703</Color>
+    <Color x:Key="TagNeutralBgColor">#1A2436</Color>
+
+    <!-- Cores Oficiais do Ranqueamento por Letras (S, A, B, C, D, E) -->
+    <Color x:Key="RankSColor">#F59E0B</Color>
+    <Color x:Key="RankAColor">#10B981</Color>
+    <Color x:Key="RankBColor">#3B82F6</Color>
+    <Color x:Key="RankCColor">#EAB308</Color>
+    <Color x:Key="RankDColor">#F97316</Color>
+    <Color x:Key="RankEColor">#EF4444</Color>
+
+    <!-- Tipografia e Contraste Nítido (Sem brancos estourados e sem textos sumidos) -->
+    <Color x:Key="TextPrimaryColor">#F8FAFC</Color>
+    <Color x:Key="TextSecondaryColor">#CBD5E1</Color>
+    <Color x:Key="TextMutedColor">#94A3B8</Color>
+    <Color x:Key="AccentForegroundColor">#0A111A</Color>
+
+    <!-- Brushes Prontos para Uso (DynamicResource e StaticResource) -->
+    <SolidColorBrush x:Key="BgDarkBrush" Color="{StaticResource BgDarkColor}" />
+    <SolidColorBrush x:Key="SidebarDarkBrush" Color="{StaticResource SidebarDarkColor}" />
+    <SolidColorBrush x:Key="HeaderDarkBrush" Color="{StaticResource HeaderDarkColor}" />
+    <SolidColorBrush x:Key="CardDarkBrush" Color="{StaticResource CardDarkColor}" />
+    <SolidColorBrush x:Key="CardHoverBrush" Color="{StaticResource CardHoverColor}" />
+    <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource SurfaceColor}" />
+    <SolidColorBrush x:Key="BorderDarkBrush" Color="{StaticResource BorderDarkColor}" />
+    <SolidColorBrush x:Key="BorderLightBrush" Color="{StaticResource BorderLightColor}" />
+    <SolidColorBrush x:Key="BorderSubtleBrush" Color="{StaticResource BorderSubtleColor}" />
+    <SolidColorBrush x:Key="TableAltRowBrush" Color="{StaticResource TableAltRowColor}" />
+    <SolidColorBrush x:Key="SelectedRowBrush" Color="{StaticResource SelectedRowColor}" />
+    <SolidColorBrush x:Key="InputBgBrush" Color="{StaticResource InputBgColor}" />
+
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
+    <SolidColorBrush x:Key="AccentDarkBrush" Color="{StaticResource AccentDarkColor}" />
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="{StaticResource AccentHoverColor}" />
+    <SolidColorBrush x:Key="AccentSubtleBrush" Color="{StaticResource AccentSubtleColor}" />
+
+    <SolidColorBrush x:Key="AuraPurpleBrush" Color="{StaticResource AuraPurpleColor}" />
+    <SolidColorBrush x:Key="AuraPurpleDarkBrush" Color="{StaticResource AuraPurpleDarkColor}" />
+
+    <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource SuccessColor}" />
+    <SolidColorBrush x:Key="WarningBrush" Color="{StaticResource WarningColor}" />
+    <SolidColorBrush x:Key="DangerBrush" Color="{StaticResource DangerColor}" />
+    <SolidColorBrush x:Key="ProBadgeBrush" Color="{StaticResource ProBadgeColor}" />
+    <SolidColorBrush x:Key="TagNeutralBgBrush" Color="{StaticResource TagNeutralBgColor}" />
+
+    <SolidColorBrush x:Key="RankSBrush" Color="{StaticResource RankSColor}" />
+    <SolidColorBrush x:Key="RankABrush" Color="{StaticResource RankAColor}" />
+    <SolidColorBrush x:Key="RankBBrush" Color="{StaticResource RankBColor}" />
+    <SolidColorBrush x:Key="RankCBrush" Color="{StaticResource RankCColor}" />
+    <SolidColorBrush x:Key="RankDBrush" Color="{StaticResource RankDColor}" />
+    <SolidColorBrush x:Key="RankEBrush" Color="{StaticResource RankEColor}" />
+
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource TextPrimaryColor}" />
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondaryColor}" />
+    <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource TextMutedColor}" />
+    <SolidColorBrush x:Key="AccentForegroundBrush" Color="{StaticResource AccentForegroundColor}" />
+</ResourceDictionary>
