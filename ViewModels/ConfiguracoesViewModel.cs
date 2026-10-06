@@ -464,6 +464,31 @@ namespace CobraPix_PC.ViewModels
         public string MonthlyPriceText => "R$ 9,90 / mês";
         public string AnnualPriceText => "R$ 89,90 / ano";
 
+        private LicenseInfo? _currentLicense;
+        public LicenseInfo? CurrentLicense
+        {
+            get => _currentLicense;
+            set
+            {
+                if (SetProperty(ref _currentLicense, value))
+                {
+                    OnPropertyChanged(nameof(HasInstalledLicense));
+                    OnPropertyChanged(nameof(LicenseDetailsText));
+                    OnPropertyChanged(nameof(LicenseExpirationText));
+                }
+            }
+        }
+
+        public bool HasInstalledLicense => CurrentLicense != null;
+
+        public string LicenseDetailsText => CurrentLicense != null
+            ? $"{CurrentLicense.PlanDisplayName} (ID: {CurrentLicense.LicenseId})"
+            : (IsPro ? "CobraPix PRO Ativo" : "Plano Free");
+
+        public string LicenseExpirationText => CurrentLicense != null
+            ? $"Válida até {CurrentLicense.FormattedExpirationDate} ({CurrentLicense.RemainingDays} dias restantes)"
+            : string.Empty;
+
         public string? ProStatusMessage
         {
             get => _proStatusMessage;
@@ -492,6 +517,43 @@ namespace CobraPix_PC.ViewModels
         /// Caminho opcional do banco de dados alvo para operações de backup/restauração (útil para testes isolados).
         /// </summary>
         public string? TargetDatabasePath { get; set; }
+
+        private string? _installationDirectoryOverride;
+        /// <summary>
+        /// Diretório opcional de instalação para testes controlados ou simulações.
+        /// </summary>
+        public string? InstallationDirectoryOverride
+        {
+            get => _installationDirectoryOverride;
+            set
+            {
+                _installationDirectoryOverride = value;
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    string verFile = Path.Combine(value, "version_info.txt");
+                    if (File.Exists(verFile))
+                    {
+                        try
+                        {
+                            foreach (var line in File.ReadAllLines(verFile))
+                            {
+                                if (line.StartsWith("VERSION=", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    if (_updateService is UpdateService concrete)
+                                    {
+                                        concrete.CurrentVersion = line.Substring(8).Trim();
+                                        OnPropertyChanged(nameof(InstalledVersion));
+                                        OnPropertyChanged(nameof(InstalledVersionText));
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+                }
+            }
+        }
 
         /// <summary>
         /// Callback executado após uma restauração ou importação de backup bem-sucedida.
@@ -686,6 +748,21 @@ namespace CobraPix_PC.ViewModels
         }
 
         public bool HasRemoteSha256 => !string.IsNullOrWhiteSpace(RemoteSha256);
+
+        private string? _packageSizeText;
+        public string? PackageSizeText
+        {
+            get => _packageSizeText;
+            set
+            {
+                if (SetProperty(ref _packageSizeText, value))
+                {
+                    OnPropertyChanged(nameof(HasPackageSizeText));
+                }
+            }
+        }
+
+        public bool HasPackageSizeText => !string.IsNullOrWhiteSpace(PackageSizeText);
 
         public ObservableCollection<string> ReleaseNotes { get; } = new();
 
@@ -926,7 +1003,7 @@ namespace CobraPix_PC.ViewModels
             OpenAnnualSubscriptionCommand = new RelayCommand(async () => await HandleSubscriptionClickAsync(isAnnual: true));
 
             CheckUpdateCommand = new RelayCommand(async () => await CheckForUpdatesAsync(), () => !IsCheckingUpdate);
-            ApplyUpdateCommand = new RelayCommand(async () => await ApplyUpdateAsync(), () => IsUpdateAvailable);
+            ApplyUpdateCommand = new RelayCommand(async () => await ApplyUpdateAsync(), () => CanApplyUpdate);
             StartDownloadCommand = new RelayCommand(async () => await StartDownloadAsync(), () => CanStartDownload);
             CancelDownloadCommand = new RelayCommand(() => CancelDownload(), () => IsDownloadingUpdate);
             DismissDownloadCommand = new RelayCommand(() => DismissDownload());
@@ -1739,6 +1816,9 @@ namespace CobraPix_PC.ViewModels
                 var status = await _proService.CheckClientLimitAsync();
                 CurrentPlan = status.Plan;
                 ActiveClientsCount = status.ActiveClientsCount;
+
+                var lic = await _proService.GetCurrentLicenseStatusAsync();
+                CurrentLicense = (lic.IsValid && lic.License != null) ? lic.License : null;
             }
         }
 
@@ -1793,6 +1873,8 @@ namespace CobraPix_PC.ViewModels
             RemoteSha256 = null;
             RemoteDownloadUrl = null;
             RemoteVersion = null;
+            PackageSizeText = null;
+            OnPropertyChanged(nameof(HasPackageSizeText));
             IsDownloadingUpdate = false;
             IsDownloadCompleted = false;
             IsDownloadValid = false;
@@ -1808,7 +1890,8 @@ namespace CobraPix_PC.ViewModels
 
             try
             {
-                var result = await _updateService.CheckForUpdatesAsync();
+                string? manifestUrl = await _updateService.GetUpdateServerUrlAsync() ?? UpdateService.DefaultManifestUrl;
+                var result = await _updateService.CheckForUpdatesAsync(manifestUrl);
 
                 UpdateStatusMessage = result.Message;
 
@@ -1818,8 +1901,19 @@ namespace CobraPix_PC.ViewModels
                         IsUpdateAvailable = true;
                         RemoteVersion = result.RemoteVersion;
                         RemoteDownloadUrl = result.DownloadUrl;
-                        RemoteVersionText = $"Nova versão: {result.RemoteVersion} (Atual: {result.CurrentVersion})";
+                        RemoteVersionText = UpdateService.IsTestEnvironmentActive
+                            ? $"[TESTE] Nova versão: {result.RemoteVersion} (Atual: {result.CurrentVersion})"
+                            : $"Nova versão: {result.RemoteVersion} (Atual: {result.CurrentVersion})";
                         RemoteSha256 = result.Sha256;
+                        if (result.PackageSizeBytes.HasValue && result.PackageSizeBytes.Value > 0)
+                        {
+                            PackageSizeText = UpdateDownloadProgress.FormatBytes(result.PackageSizeBytes.Value);
+                        }
+                        else
+                        {
+                            PackageSizeText = null;
+                        }
+                        OnPropertyChanged(nameof(HasPackageSizeText));
                         OnPropertyChanged(nameof(CanStartDownload));
                         (StartDownloadCommand as RelayCommand)?.RaiseCanExecuteChanged();
                         if (result.ReleaseNotes != null)
@@ -1830,28 +1924,47 @@ namespace CobraPix_PC.ViewModels
                             }
                         }
                         OnPropertyChanged(nameof(HasReleaseNotes));
+                        UpdateStatusMessage = "Nova versão disponível.";
                         ShowUpdateSuccess = true;
+                        ShowUpdateInfo = false;
+                        ShowUpdateError = false;
                         break;
 
                     case UpdateStatus.UpToDate:
+                        UpdateStatusMessage = "Você já está usando a versão mais recente do CobraPix.";
                         ShowUpdateSuccess = true;
+                        ShowUpdateInfo = false;
+                        ShowUpdateError = false;
                         break;
 
                     case UpdateStatus.NotConfigured:
+                        UpdateStatusMessage = "O CobraPix está conectado ao canal oficial de atualizações.";
                         ShowUpdateInfo = true;
+                        ShowUpdateSuccess = false;
+                        ShowUpdateError = false;
                         break;
 
                     case UpdateStatus.NetworkError:
+                        UpdateStatusMessage = "Não foi possível verificar atualizações agora. O CobraPix continuará funcionando normalmente.";
+                        ShowUpdateError = true;
+                        ShowUpdateSuccess = false;
+                        ShowUpdateInfo = false;
+                        break;
+
                     case UpdateStatus.InvalidManifest:
                     case UpdateStatus.Error:
                     default:
                         ShowUpdateError = true;
+                        ShowUpdateSuccess = false;
+                        ShowUpdateInfo = false;
                         break;
                 }
             }
             catch (Exception ex)
             {
                 ShowUpdateError = true;
+                ShowUpdateSuccess = false;
+                ShowUpdateInfo = false;
                 UpdateStatusMessage = "Não foi possível verificar atualizações agora. O CobraPix continuará funcionando normalmente.";
                 Debug.WriteLine($"[ConfiguracoesViewModel] Erro na verificação de atualização: {ex.Message}");
             }
@@ -1878,7 +1991,7 @@ namespace CobraPix_PC.ViewModels
             DownloadProgressPercentage = 0;
             DownloadPercentageText = "0%";
             DownloadProgressText = "Preparando download...";
-            DownloadStatusText = "Preparando download...";
+            DownloadStatusText = "Baixando...";
             UpdateStatusMessage = null;
             ShowUpdateError = false;
             ShowUpdateSuccess = false;
@@ -1891,7 +2004,14 @@ namespace CobraPix_PC.ViewModels
                 DownloadProgressPercentage = p.Percentage;
                 DownloadPercentageText = p.PercentageText;
                 DownloadProgressText = p.ProgressText;
-                DownloadStatusText = $"Baixando atualização... {p.PercentageText}";
+                if (p.Percentage >= 100.0 && (p.ProgressText.Contains("Validando") || p.ProgressText.Contains("SHA-256")))
+                {
+                    DownloadStatusText = "Validando SHA-256...";
+                }
+                else
+                {
+                    DownloadStatusText = $"Baixando instalador oficial... {p.ProgressText}";
+                }
             });
 
             try
@@ -1907,9 +2027,11 @@ namespace CobraPix_PC.ViewModels
                 if (result.IsCancelled)
                 {
                     IsDownloadingUpdate = false;
-                    DownloadStatusText = "Download cancelado.";
+                    DownloadStatusText = "Cancelado";
                     UpdateStatusMessage = "Download cancelado pelo usuário.";
                     ShowUpdateInfo = true;
+                    ShowUpdateSuccess = false;
+                    ShowUpdateError = false;
                 }
                 else if (result.Success && result.IntegrityVerified)
                 {
@@ -1917,18 +2039,28 @@ namespace CobraPix_PC.ViewModels
                     IsDownloadCompleted = true;
                     IsDownloadValid = true;
                     DownloadedFilePath = result.LocalFilePath;
-                    DownloadStatusText = "Download concluído e validado.";
-                    UpdateStatusMessage = "Atualização pronta para instalar. Pacote de atualização baixado e validado com sucesso.";
+                    if (!string.IsNullOrWhiteSpace(result.LocalFilePath) && File.Exists(result.LocalFilePath))
+                    {
+                        var fi = new FileInfo(result.LocalFilePath);
+                        PackageSizeText = UpdateDownloadProgress.FormatBytes(fi.Length);
+                        OnPropertyChanged(nameof(HasPackageSizeText));
+                    }
+                    DownloadStatusText = "Atualização pronta para instalar.";
+                    UpdateStatusMessage = "Atualização pronta para instalar.";
                     ShowUpdateSuccess = true;
+                    ShowUpdateInfo = false;
+                    ShowUpdateError = false;
                 }
                 else
                 {
                     IsDownloadingUpdate = false;
                     IsDownloadCompleted = false;
                     IsDownloadValid = false;
-                    DownloadStatusText = "Falha na validação do download.";
+                    DownloadStatusText = "Erro";
                     UpdateStatusMessage = result.FriendlyMessage ?? "Não foi possível validar a atualização. O download foi descartado.";
                     ShowUpdateError = true;
+                    ShowUpdateSuccess = false;
+                    ShowUpdateInfo = false;
                 }
             }
             catch (OperationCanceledException)
@@ -2014,10 +2146,11 @@ namespace CobraPix_PC.ViewModels
                 return;
             }
 
-            // Fase 3: Confirmação e acionamento seguro do CobraPix.Updater.exe
-            string confirmMsg = "Antes de atualizar, recomendamos fazer um backup dos seus dados.\n\n" +
-                               "O CobraPix será fechado temporariamente para concluir a atualização.\n\n" +
-                               "Deseja fechar o CobraPix e iniciar a atualização agora?";
+            // Fase 3: Confirmação e acionamento seguro do instalador oficial Inno Setup
+            string confirmMsg = "Uma atualização do CobraPix está pronta.\n\n" +
+                               "O Windows poderá solicitar permissão de administrador para concluir a instalação.\n\n" +
+                               "O CobraPix será fechado temporariamente e reaberto após a atualização.\n\n" +
+                               "Seus dados permanecem armazenados localmente.\n\nDeseja continuar?";
 
             bool confirmed = (ConfirmDialogFunc != null)
                 ? ConfirmDialogFunc("Atualização do CobraPix", confirmMsg)
@@ -2037,12 +2170,97 @@ namespace CobraPix_PC.ViewModels
                 return;
             }
 
-            string baseDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            string updaterExe = Path.Combine(baseDir, "CobraPix.Updater.exe");
+            // 1. Fluxo Oficial Comercial: Instalador Inno Setup (.exe)
+            if (DownloadedFilePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            {
+                string setupExe = DownloadedFilePath;
+                string setupArgs = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS";
+                if (!string.IsNullOrWhiteSpace(InstallationDirectoryOverride))
+                {
+                    setupArgs += $" /DIR=\"{InstallationDirectoryOverride}\"";
+                }
 
+                try
+                {
+                    if (StartUpdaterProcessAction != null)
+                    {
+                        StartUpdaterProcessAction(setupExe, setupArgs);
+                    }
+                    else
+                    {
+                        var psi = new ProcessStartInfo
+                        {
+                            FileName = setupExe,
+                            Arguments = setupArgs,
+                            UseShellExecute = true,
+                            WorkingDirectory = Path.GetDirectoryName(setupExe) ?? AppContext.BaseDirectory
+                        };
+
+                        Process.Start(psi);
+                    }
+
+                    UpdateStatusMessage = "Atualização iniciada. O CobraPix será reaberto na nova versão.";
+                    ShowUpdateSuccess = true;
+                    ShowUpdateInfo = false;
+                    ShowUpdateError = false;
+                }
+                catch (System.ComponentModel.Win32Exception winEx) when (winEx.NativeErrorCode == 1223)
+                {
+                    UpdateStatusMessage = "Atualização cancelada pelo usuário. A permissão de administrador não foi concedida e nenhuma alteração foi realizada.";
+                    ShowUpdateInfo = true;
+                    ShowUpdateSuccess = false;
+                    ShowUpdateError = false;
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    UpdateStatusMessage = $"Falha ao iniciar o instalador: {ex.Message}";
+                    ShowUpdateError = true;
+                    ShowUpdateSuccess = false;
+                    ShowUpdateInfo = false;
+                    return;
+                }
+
+                if (ShutdownApplicationAction != null)
+                {
+                    ShutdownApplicationAction();
+                }
+                else
+                {
+                    _ = Task.Delay(500).ContinueWith(_ =>
+                    {
+                        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+                        {
+                            System.Windows.Application.Current.Shutdown();
+                        });
+                    });
+                }
+
+                await Task.CompletedTask;
+                return;
+            }
+
+            // 2. Fluxo Legado: Pacote .zip acionando CobraPix.Updater.exe (compatibilidade regressiva de testes)
+            string effectiveInstallDir = (!string.IsNullOrWhiteSpace(InstallationDirectoryOverride))
+                ? InstallationDirectoryOverride
+                : AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+            // Bloqueio de segurança se executado em diretório de dev/compilação real sem mock
+            if (StartUpdaterProcessAction == null && IsInvalidInstallationDirectory(effectiveInstallDir, out string blockReason))
+            {
+                UpdateStatusMessage = $"A atualização automática não pode ser executada em diretório de compilação ou desenvolvimento ({blockReason}).";
+                ShowUpdateError = true;
+                return;
+            }
+
+            string updaterExe = Path.Combine(effectiveInstallDir, "CobraPix.Updater.exe");
             if (!File.Exists(updaterExe))
             {
-                UpdateStatusMessage = $"O executável do atualizador ({Path.GetFileName(updaterExe)}) não foi encontrado em '{baseDir}'.";
+                updaterExe = Path.Combine(AppContext.BaseDirectory, "CobraPix.Updater.exe");
+            }
+            if (!File.Exists(updaterExe))
+            {
+                UpdateStatusMessage = $"O executável do atualizador ({Path.GetFileName(updaterExe)}) não foi encontrado em '{effectiveInstallDir}'.";
                 ShowUpdateError = true;
                 return;
             }
@@ -2059,11 +2277,10 @@ namespace CobraPix_PC.ViewModels
             }
             catch
             {
-                // Fallback padrão
             }
 
             int pid = Environment.ProcessId;
-            string arguments = $"--pid {pid} --package \"{DownloadedFilePath}\" --install-dir \"{baseDir}\" --exe \"{mainExeName}\"";
+            string arguments = $"--pid {pid} --package \"{DownloadedFilePath}\" --install-dir \"{effectiveInstallDir}\" --exe \"{mainExeName}\" --silent";
 
             try
             {
@@ -2078,10 +2295,24 @@ namespace CobraPix_PC.ViewModels
                         FileName = updaterExe,
                         Arguments = arguments,
                         UseShellExecute = true,
-                        WorkingDirectory = baseDir
+                        WorkingDirectory = effectiveInstallDir
                     };
+
+                    if (CobraPix.Updater.UpdaterEngine.RequiresElevation(effectiveInstallDir))
+                    {
+                        psi.Verb = "runas";
+                    }
+
                     Process.Start(psi);
                 }
+            }
+            catch (System.ComponentModel.Win32Exception winEx) when (winEx.NativeErrorCode == 1223)
+            {
+                UpdateStatusMessage = "Atualização cancelada pelo usuário. A permissão de administrador não foi concedida e nenhuma alteração foi realizada.";
+                ShowUpdateInfo = true;
+                ShowUpdateSuccess = false;
+                ShowUpdateError = false;
+                return;
             }
             catch (Exception ex)
             {
@@ -2107,6 +2338,107 @@ namespace CobraPix_PC.ViewModels
             }
 
             await Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Valida se o diretório de destino é seguro para instalação, impedindo tentativas de
+        /// atualizar sobre pastas de compilação (bin\Release), artefatos, código-fonte, dados do usuário ou temporárias.
+        /// </summary>
+        public static bool IsInvalidInstallationDirectory(string? directory, out string errorMessage)
+        {
+            errorMessage = string.Empty;
+            if (string.IsNullOrWhiteSpace(directory))
+            {
+                errorMessage = "O diretório da aplicação não pôde ser determinado.";
+                return true;
+            }
+
+            string normalized;
+            try
+            {
+                normalized = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Caminho de diretório inválido: {ex.Message}";
+                return true;
+            }
+
+            // 1. Proibição estrita contra o diretório de dados do usuário (%LOCALAPPDATA%\CobraPix)
+            string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            string forbiddenUserDataDir = Path.Combine(localAppData, "CobraPix").TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (normalized.Equals(forbiddenUserDataDir, StringComparison.OrdinalIgnoreCase) ||
+                normalized.StartsWith(forbiddenUserDataDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            {
+                errorMessage = $"Violação de segurança: O diretório de instalação não pode ser a pasta de dados do usuário ('{forbiddenUserDataDir}').";
+                return true;
+            }
+
+            // 2. Pasta temporária (%TEMP%)
+            // Permite exclusivamente o diretório isolado de testes (%TEMP%\CobraPix\UpdateTest)
+            string tempDir = Path.GetFullPath(Path.GetTempPath()).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string allowedTestRoot = Path.Combine(tempDir, "CobraPix", "UpdateTest").TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            bool isAllowedTestDirectory = normalized.StartsWith(allowedTestRoot, StringComparison.OrdinalIgnoreCase);
+
+            if (!isAllowedTestDirectory &&
+                (normalized.Equals(tempDir, StringComparison.OrdinalIgnoreCase) ||
+                 normalized.StartsWith(tempDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)))
+            {
+                errorMessage = "O aplicativo está sendo executado a partir de uma pasta temporária e não de uma instalação permanente do CobraPix PC.";
+                return true;
+            }
+
+            // 3. Pastas de compilação (bin\Release, bin\Debug)
+            string sep = Path.DirectorySeparatorChar.ToString();
+            string altSep = Path.AltDirectorySeparatorChar.ToString();
+            if (normalized.Contains(sep + "bin" + sep, StringComparison.OrdinalIgnoreCase) ||
+                normalized.Contains(altSep + "bin" + altSep, StringComparison.OrdinalIgnoreCase) ||
+                normalized.EndsWith(sep + "bin", StringComparison.OrdinalIgnoreCase) ||
+                normalized.EndsWith(altSep + "bin", StringComparison.OrdinalIgnoreCase))
+            {
+                errorMessage = "A atualização automática está desabilitada quando o executável roda diretamente da pasta de compilação (bin\\Release ou bin\\Debug). Utilize uma instalação oficial.";
+                return true;
+            }
+
+            // 4. Pasta de artefatos de publicação (artifacts)
+            if (normalized.Contains(sep + "artifacts" + sep, StringComparison.OrdinalIgnoreCase) ||
+                normalized.Contains(altSep + "artifacts" + altSep, StringComparison.OrdinalIgnoreCase) ||
+                normalized.EndsWith(sep + "artifacts", StringComparison.OrdinalIgnoreCase) ||
+                normalized.EndsWith(altSep + "artifacts", StringComparison.OrdinalIgnoreCase))
+            {
+                errorMessage = "O diretório atual corresponde à pasta de artefatos de publicação (artifacts) e não a uma instalação oficial.";
+                return true;
+            }
+
+            // 5. Projeto fonte / Repositório Git (contendo .csproj ou .git na pasta ou pais)
+            try
+            {
+                var dirInfo = new DirectoryInfo(normalized);
+                var p1 = dirInfo.Parent;
+                var p2 = p1?.Parent;
+                var p3 = p2?.Parent;
+
+                bool hasProjectFile = dirInfo.GetFiles("*.csproj").Length > 0 ||
+                                     (p1 != null && p1.GetFiles("*.csproj").Length > 0) ||
+                                     (p2 != null && p2.GetFiles("*.csproj").Length > 0) ||
+                                     (p3 != null && p3.GetFiles("*.csproj").Length > 0);
+
+                if (hasProjectFile)
+                {
+                    errorMessage = "A atualização automática está desabilitada dentro da árvore de código-fonte do projeto. Utilize uma instalação oficial.";
+                    return true;
+                }
+            }
+            catch { }
+
+            // 6. Pasta exclusiva do próprio updater
+            if (Path.GetFileName(normalized).Equals("CobraPix.Updater", StringComparison.OrdinalIgnoreCase))
+            {
+                errorMessage = "O diretório de instalação não pode ser a subpasta exclusiva do atualizador.";
+                return true;
+            }
+
+            return false;
         }
     }
 }

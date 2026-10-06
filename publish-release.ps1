@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position=0)]
-    [string]$Version = "1.0.1",
+    [string]$Version = "1.0.3",
 
     [Parameter()]
     [string]$Configuration = "Release",
@@ -192,16 +192,17 @@ Write-Host "[8/8] Calculando SHA-256 e gerando manifestos..." -ForegroundColor Y
 $sha256 = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash.ToUpperInvariant()
 
 $releaseNotes = @(
-    "Sistema completo de atualizacao do aplicativo com integridade verificavel por SHA-256",
-    "Instalador independente (CobraPix.Updater.exe) com rollback automatico em caso de falhas",
-    "Exportacao avancada de dados financeiros para planilhas Excel (.xlsx)",
-    "Precisao aprimorada do agendador e notificacoes de atrasados",
-    "Melhorias gerais de estabilidade, desempenho e compatibilidade com Windows 10/11"
+    "Versao comercial 1.0.3 do CobraPix PC - agora com sistema PRO via licenca digital",
+    "Ativacao PRO offline com licenca ECDSA segura (mensal 30 dias / anual 365 dias)",
+    "Preservacao integral garantida de dados e bancos de dados SQLite locais",
+    "Otimizacoes de desempenho e integridade em Windows 10 e Windows 11",
+    "Antes de atualizar, recomendamos fazer um backup dos seus dados.",
+    "Os dados do CobraPix permanecem armazenados localmente com total seguranca."
 )
 
 $manifestData = [ordered]@{
     version = $Version
-    downloadUrl = ""
+    downloadUrl = "https://github.com/TraderReverso/CobraPix-PC-Releases/releases/download/v$Version/$zipName"
     sha256 = $sha256
     releaseNotes = $releaseNotes
     mandatory = $false
@@ -223,12 +224,13 @@ $jsonSettings = @{ Depth = 10 }
 $manifestJson = $manifestData | ConvertTo-Json @jsonSettings
 $releaseInfoJson = $releaseInfoData | ConvertTo-Json @jsonSettings
 
-[System.IO.File]::WriteAllText($manifestPath, $manifestJson, [System.Text.Encoding]::UTF8)
-[System.IO.File]::WriteAllText($releaseInfoPath, $releaseInfoJson, [System.Text.Encoding]::UTF8)
+$utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+[System.IO.File]::WriteAllText($manifestPath, $manifestJson, $utf8NoBom)
+[System.IO.File]::WriteAllText($releaseInfoPath, $releaseInfoJson, $utf8NoBom)
 
 Write-Host ""
 Write-Host "==========================================================" -ForegroundColor Green
-Write-Host "         PUBLICACAO 1.0.1 CONCLUIDA COM SUCESSO!          " -ForegroundColor Green
+Write-Host "         PUBLICACAO $Version CONCLUIDA COM SUCESSO!          " -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Green
 Write-Host "Versao           : $Version"
 Write-Host "Runtime          : $Runtime (Self-Contained: $SelfContained)"

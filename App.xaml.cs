@@ -44,6 +44,7 @@ namespace CobraPix_PC
             services.AddScoped<IBackupService, BackupService>();
             services.AddScoped<IAndroidBackupReader, AndroidBackupReader>();
             services.AddScoped<IAndroidImportService, AndroidImportService>();
+            services.AddScoped<ILicenseService, LicenseService>();
             services.AddScoped<IProService, ProService>();
             services.AddScoped<IThemeService, ThemeService>();
             services.AddScoped<IClientRankingService, ClientRankingService>();
@@ -74,6 +75,22 @@ namespace CobraPix_PC
 
         protected override async void OnStartup(StartupEventArgs e)
         {
+            if (e.Args.Length > 0 && e.Args[0] == "--test-wait-for-updater")
+            {
+                string signalFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "close_signal.tmp");
+                DateTime deadline = DateTime.UtcNow.AddMinutes(5);
+                while (DateTime.UtcNow < deadline && !File.Exists(signalFile))
+                {
+                    System.Threading.Thread.Sleep(100);
+                }
+                if (File.Exists(signalFile))
+                {
+                    try { File.Delete(signalFile); } catch { }
+                }
+                Environment.Exit(0);
+                return;
+            }
+
             base.OnStartup(e);
 
             // Suporte a validação automatizada das regras em ambiente isolado (sem abrir telas)
@@ -95,7 +112,7 @@ namespace CobraPix_PC
                 }
                 finally
                 {
-                    Shutdown(Environment.ExitCode);
+                    Environment.Exit(Environment.ExitCode);
                 }
                 return;
             }
@@ -110,6 +127,326 @@ namespace CobraPix_PC
                 catch (Exception ex)
                 {
                     Console.Error.WriteLine("DIAGNOSE_FAILED: " + ex.Message);
+                    Environment.ExitCode = 1;
+                }
+                finally
+                {
+                    Shutdown(Environment.ExitCode);
+                }
+                return;
+            }
+
+            if (e.Args.Length > 0 && e.Args[0] == "--test-live-download")
+            {
+                string logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test_download_result.log");
+                try
+                {
+                    var results = await BusinessRulesValidator.RunLiveDownloadTestAsync();
+                    File.WriteAllLines(logFile, results);
+                    foreach (var r in results) Console.WriteLine(r);
+                    Console.WriteLine("ALL_DOWNLOAD_TESTS_PASSED");
+                    Environment.ExitCode = 0;
+                }
+                catch (Exception ex)
+                {
+                    File.WriteAllText(logFile, $"ERRO: {ex.Message}\n{ex.StackTrace}");
+                    Console.Error.WriteLine("TEST_FAILED: " + ex.Message);
+                    Environment.ExitCode = 1;
+                }
+                finally
+                {
+                    Shutdown(Environment.ExitCode);
+                }
+                return;
+            }
+
+            if (e.Args.Length > 0 && e.Args[0] == "--test-updater-isolated")
+            {
+                string logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test_updater_isolated_result.log");
+                try
+                {
+                    var results = await BusinessRulesValidator.RunIsolatedUpdaterAndRollbackTestAsync();
+                    File.WriteAllLines(logFile, results);
+                    foreach (var r in results) Console.WriteLine(r);
+                    Console.WriteLine("ALL_ISOLATED_UPDATER_TESTS_PASSED");
+                    Environment.ExitCode = 0;
+                }
+                catch (Exception ex)
+                {
+                    File.WriteAllText(logFile, $"ERRO: {ex.Message}\n{ex.StackTrace}");
+                    Console.Error.WriteLine("TEST_FAILED: " + ex.Message);
+                    Environment.ExitCode = 1;
+                }
+                finally
+                {
+                    Shutdown(Environment.ExitCode);
+                }
+                return;
+            }
+
+            if (e.Args.Length > 0 && e.Args[0] == "--test-ui-update-integration")
+            {
+                string logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test_ui_update_integration_result.log");
+                try
+                {
+                    var results = await BusinessRulesValidator.RunUiUpdateIntegrationTestAsync();
+                    File.WriteAllLines(logFile, results);
+                    foreach (var r in results) Console.WriteLine(r);
+                    Console.WriteLine("ALL_UI_UPDATE_INTEGRATION_TESTS_PASSED");
+                    Environment.ExitCode = 0;
+                }
+                catch (Exception ex)
+                {
+                    File.WriteAllText(logFile, $"ERRO: {ex.Message}\n{ex.StackTrace}");
+                    Console.Error.WriteLine("TEST_FAILED: " + ex.Message);
+                    Environment.ExitCode = 1;
+                }
+                finally
+                {
+                    Shutdown(Environment.ExitCode);
+                }
+                return;
+            }
+
+            if (e.Args.Length > 0 && e.Args[0] == "--test-controlled-update-env")
+            {
+                string logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test_controlled_update_env_result.log");
+                try
+                {
+                    var results = await BusinessRulesValidator.RunControlledUpdateEnvironmentTestAsync();
+                    File.WriteAllLines(logFile, results);
+                    foreach (var r in results) Console.WriteLine(r);
+                    Console.WriteLine("ALL_CONTROLLED_UPDATE_ENV_TESTS_PASSED");
+                    Environment.ExitCode = 0;
+                }
+                catch (Exception ex)
+                {
+                    File.WriteAllText(logFile, $"ERRO: {ex.Message}\n{ex.StackTrace}");
+                    Console.Error.WriteLine("TEST_FAILED: " + ex.Message);
+                    Environment.ExitCode = 1;
+                }
+                finally
+                {
+                    Shutdown(Environment.ExitCode);
+                }
+                return;
+            }
+
+            // Suporte para ativação explícita de ambiente de teste de atualização via CLI ou variável de ambiente
+            for (int i = 0; i < e.Args.Length; i++)
+            {
+                if (e.Args[i] == "--test-manifest-url" && i + 1 < e.Args.Length)
+                {
+                    UpdateService.SetTestManifestUrl(e.Args[i + 1]);
+                    break;
+                }
+            }
+
+            string? envTestManifest = Environment.GetEnvironmentVariable("COBRAPIX_TEST_UPDATE_MANIFEST_URL");
+            if (!string.IsNullOrWhiteSpace(envTestManifest) && !UpdateService.IsTestEnvironmentActive)
+            {
+                UpdateService.SetTestManifestUrl(envTestManifest);
+            }
+
+            if (e.Args.Length > 0 && e.Args[0] == "--test-verify-startup")
+            {
+                string installDir = AppDomain.CurrentDomain.BaseDirectory;
+                string markerPath = Path.Combine(installDir, "test_version_marker.json");
+                string verFilePath = Path.Combine(installDir, "version_info.txt");
+                string dllPath = Path.Combine(installDir, "CobraPix PC.dll");
+                string exePath = Path.Combine(installDir, "CobraPix PC.exe");
+                string detectedVersion = "Unknown";
+                bool isVersion102 = false;
+                bool isVersion103 = false;
+
+                if (File.Exists(dllPath))
+                {
+                    var fvi = System.Diagnostics.FileVersionInfo.GetVersionInfo(dllPath);
+                    detectedVersion = fvi.FileVersion ?? fvi.ProductVersion ?? "Unknown";
+                    if (detectedVersion.StartsWith("1.0.2")) isVersion102 = true;
+                    if (detectedVersion.StartsWith("1.0.3")) isVersion103 = true;
+                }
+                else if (File.Exists(exePath))
+                {
+                    var fvi = System.Diagnostics.FileVersionInfo.GetVersionInfo(exePath);
+                    detectedVersion = fvi.FileVersion ?? fvi.ProductVersion ?? "Unknown";
+                    if (detectedVersion.StartsWith("1.0.2")) isVersion102 = true;
+                    if (detectedVersion.StartsWith("1.0.3")) isVersion103 = true;
+                }
+
+                if (!isVersion102 && File.Exists(markerPath)) isVersion102 = true;
+                if (!isVersion102 && File.Exists(verFilePath) && File.ReadAllText(verFilePath).Contains("1.0.2")) isVersion102 = true;
+                if (!isVersion103 && File.Exists(verFilePath) && File.ReadAllText(verFilePath).Contains("1.0.3")) isVersion103 = true;
+
+                Console.WriteLine($"STARTUP_SUCCESS_PID:{Environment.ProcessId}");
+                Console.WriteLine($"INSTALL_DIR:{installDir}");
+                Console.WriteLine($"DETECTED_VERSION:{detectedVersion}");
+                Console.WriteLine($"IS_VERSION_1_0_2:{isVersion102}");
+                Console.WriteLine($"IS_VERSION_1_0_3:{isVersion103}");
+                Console.WriteLine("UPDATER_LOOP_DETECTED:False");
+                Environment.Exit(0);
+                return;
+            }
+
+            if (e.Args.Length > 0 && e.Args[0] == "--test-realrun-update")
+            {
+                string logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test_realrun_update_result.log");
+                try
+                {
+                    var results = await BusinessRulesValidator.RunRealRunUpdateTestAsync();
+                    File.WriteAllLines(logFile, results);
+                    foreach (var r in results) Console.WriteLine(r);
+                    Console.WriteLine("ALL_REALRUN_UPDATE_TESTS_PASSED");
+                    Environment.ExitCode = 0;
+                }
+                catch (Exception ex)
+                {
+                    File.WriteAllText(logFile, $"ERRO: {ex.Message}\n{ex.StackTrace}");
+                    Console.Error.WriteLine("TEST_FAILED: " + ex.Message);
+                    Environment.ExitCode = 1;
+                }
+                finally
+                {
+                    Shutdown(Environment.ExitCode);
+                }
+                return;
+            }
+
+            if (e.Args.Length > 0 && e.Args[0] == "--test-phase-update-final")
+            {
+                string logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test_phase_update_final_result.log");
+                try
+                {
+                    var results = await BusinessRulesValidator.RunFinal14UpdatePhaseTestsAsync();
+                    File.WriteAllLines(logFile, results);
+                    foreach (var r in results) Console.WriteLine(r);
+                    Console.WriteLine("ALL_FINAL_14_UPDATE_TESTS_PASSED");
+                    Environment.ExitCode = 0;
+                }
+                catch (Exception ex)
+                {
+                    File.WriteAllText(logFile, $"ERRO: {ex.Message}\n{ex.StackTrace}");
+                    Console.Error.WriteLine("TEST_FAILED: " + ex.Message);
+                    Environment.ExitCode = 1;
+                }
+                finally
+                {
+                    Shutdown(Environment.ExitCode);
+                }
+                return;
+            }
+
+            if (e.Args.Length > 0 && e.Args[0] == "--test-phase-manifest-connection")
+            {
+                string logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test_manifest_102_result.log");
+                try
+                {
+                    var results = await BusinessRulesValidator.ValidatePhaseProductionManifest102ConnectionAsync();
+                    File.WriteAllLines(logFile, results);
+                    foreach (var r in results) Console.WriteLine(r);
+                    Console.WriteLine("ALL_MANIFEST_102_TESTS_PASSED");
+                    Environment.ExitCode = 0;
+                }
+                catch (Exception ex)
+                {
+                    File.WriteAllText(logFile, $"ERRO: {ex.Message}\n{ex.StackTrace}");
+                    Console.Error.WriteLine("TEST_FAILED: " + ex.Message);
+                    Environment.ExitCode = 1;
+                }
+                finally
+                {
+                    Shutdown(Environment.ExitCode);
+                }
+                return;
+            }
+
+            if (e.Args.Length > 0 && e.Args[0] == "--test-real-ui-update")
+            {
+                string logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test_real_ui_update_result.log");
+                try
+                {
+                    var results = await BusinessRulesValidator.RunRealUiUpdateFlowAsync();
+                    File.WriteAllLines(logFile, results);
+                    foreach (var r in results) Console.WriteLine(r);
+                    Console.WriteLine("ALL_REAL_UI_UPDATE_TESTS_PASSED");
+                    Environment.ExitCode = 0;
+                }
+                catch (Exception ex)
+                {
+                    File.WriteAllText(logFile, $"ERRO: {ex.Message}\n{ex.StackTrace}");
+                    Console.Error.WriteLine("TEST_FAILED: " + ex.Message);
+                    Environment.ExitCode = 1;
+                }
+                finally
+                {
+                    Shutdown(Environment.ExitCode);
+                }
+                return;
+            }
+
+            if (e.Args.Length > 0 && e.Args[0] == "--test-phase-uac-elevation")
+            {
+                string logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test_phase_uac_elevation_result.log");
+                try
+                {
+                    var results = await BusinessRulesValidator.RunUacElevationTestsAsync();
+                    File.WriteAllLines(logFile, results);
+                    foreach (var r in results) Console.WriteLine(r);
+                    Console.WriteLine("ALL_UAC_ELEVATION_TESTS_PASSED");
+                    Environment.ExitCode = 0;
+                }
+                catch (Exception ex)
+                {
+                    File.WriteAllText(logFile, $"ERRO: {ex.Message}\n{ex.StackTrace}");
+                    Console.Error.WriteLine("TEST_FAILED: " + ex.Message);
+                    Environment.ExitCode = 1;
+                }
+                finally
+                {
+                    Shutdown(Environment.ExitCode);
+                }
+                return;
+            }
+
+            if (e.Args.Length > 0 && e.Args[0] == "--test-phase-inno-update")
+            {
+                string logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test_phase_inno_update_result.log");
+                try
+                {
+                    var results = await BusinessRulesValidator.RunInnoSetupCommercialUpdateTestsAsync();
+                    File.WriteAllLines(logFile, results);
+                    foreach (var r in results) Console.WriteLine(r);
+                    Console.WriteLine("ALL_INNO_SETUP_UPDATE_TESTS_PASSED");
+                    Environment.ExitCode = 0;
+                }
+                catch (Exception ex)
+                {
+                    File.WriteAllText(logFile, $"ERRO: {ex.Message}\n{ex.StackTrace}");
+                    Console.Error.WriteLine("TEST_FAILED: " + ex.Message);
+                    Environment.ExitCode = 1;
+                }
+                finally
+                {
+                    Shutdown(Environment.ExitCode);
+                }
+                return;
+            }
+
+            if (e.Args.Length > 0 && e.Args[0] == "--test-real-inno-flow")
+            {
+                string logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test_real_inno_flow_result.log");
+                try
+                {
+                    var results = await BusinessRulesValidator.RunRealInnoUpdate102To103TestAsync();
+                    File.WriteAllLines(logFile, results);
+                    foreach (var r in results) Console.WriteLine(r);
+                    Console.WriteLine("ALL_REAL_INNO_UPDATE_TESTS_PASSED");
+                    Environment.ExitCode = 0;
+                }
+                catch (Exception ex)
+                {
+                    File.WriteAllText(logFile, $"ERRO: {ex.Message}\n{ex.StackTrace}");
+                    Console.Error.WriteLine("TEST_FAILED: " + ex.Message);
                     Environment.ExitCode = 1;
                 }
                 finally

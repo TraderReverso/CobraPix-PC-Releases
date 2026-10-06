@@ -20,6 +20,7 @@ namespace CobraPix_PC.Services
     public class UpdateService : IUpdateService
     {
         public const string KeyUpdateServerUrl = "Update.ManifestUrl";
+        public const string DefaultManifestUrl = IUpdateService.DefaultManifestUrl;
         private const int DefaultTimeoutSeconds = 5;
 
         private readonly CobraPixDbContext? _context;
@@ -29,7 +30,52 @@ namespace CobraPix_PC.Services
             Timeout = TimeSpan.FromSeconds(DefaultTimeoutSeconds)
         };
 
-        public string CurrentVersion => AppVersionInfo.CurrentVersion;
+        private static string? _testManifestUrlOverride;
+        private static bool _isTestEnvironmentActive;
+
+        /// <summary>
+        /// Indica se o ambiente controlado de testes de atualização está explicitamente ativo.
+        /// </summary>
+        public static bool IsTestEnvironmentActive => _isTestEnvironmentActive && !string.IsNullOrWhiteSpace(_testManifestUrlOverride);
+
+        /// <summary>
+        /// Retorna a URL de manifesto de teste ativa em memória, ou null quando em produção oficial.
+        /// </summary>
+        public static string? ActiveTestManifestUrl => IsTestEnvironmentActive ? _testManifestUrlOverride : null;
+
+        /// <summary>
+        /// Ativa explicitamente o ambiente de teste apontando para um manifesto alternativo em memória.
+        /// NÃO grava no banco de dados e NÃO altera permanentemente as configurações do aplicativo.
+        /// </summary>
+        public static void SetTestManifestUrl(string? testUrl)
+        {
+            if (string.IsNullOrWhiteSpace(testUrl))
+            {
+                ClearTestManifestUrl();
+                return;
+            }
+
+            _testManifestUrlOverride = testUrl.Trim();
+            _isTestEnvironmentActive = true;
+            Console.WriteLine($"[AVISO DE TESTE] ATENÇÃO: Ambiente controlado de atualização ATIVADO.");
+            Console.WriteLine($"[AVISO DE TESTE] Manifesto de teste: {_testManifestUrlOverride}");
+        }
+
+        /// <summary>
+        /// Desativa o ambiente de teste em memória, restaurando imediatamente o endpoint oficial padrão.
+        /// </summary>
+        public static void ClearTestManifestUrl()
+        {
+            _testManifestUrlOverride = null;
+            _isTestEnvironmentActive = false;
+        }
+
+        private string? _currentVersionOverride;
+        public string CurrentVersion
+        {
+            get => _currentVersionOverride ?? AppVersionInfo.CurrentVersion;
+            set => _currentVersionOverride = value;
+        }
 
         public UpdateService(CobraPixDbContext? context = null, IBackupService? backupService = null)
         {
@@ -39,6 +85,12 @@ namespace CobraPix_PC.Services
 
         public async Task<string?> GetUpdateServerUrlAsync()
         {
+            // Se o ambiente de teste controlado foi explicitamente ativado em memória, utiliza a URL de teste
+            if (IsTestEnvironmentActive)
+            {
+                return ActiveTestManifestUrl;
+            }
+
             if (_context == null) return null;
 
             try
@@ -98,7 +150,12 @@ namespace CobraPix_PC.Services
             }
 
             // 2. Validação estrita de segurança: HTTPS obrigatório (bloqueia HTTP inseguro)
-            if (!url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            // No ambiente de teste controlado, URLs locais (file:// ou arquivos existentes em %TEMP%) são suportadas offline.
+            bool isLocalTestUrl = IsTestEnvironmentActive &&
+                (url.StartsWith("file://", StringComparison.OrdinalIgnoreCase) ||
+                 (Path.IsPathRooted(url) && File.Exists(url)));
+
+            if (!url.StartsWith("https://", StringComparison.OrdinalIgnoreCase) && !isLocalTestUrl)
             {
                 return new UpdateCheckResult
                 {
@@ -108,14 +165,47 @@ namespace CobraPix_PC.Services
                 };
             }
 
-            // 3. Consulta HTTP remota com tratamento robusto para modo offline / falhas de rede
-            var client = httpClient ?? SharedHttpClient;
             string jsonContent;
-            try
+            if (isLocalTestUrl)
             {
-                using var response = await client.GetAsync(url);
-                if (!response.IsSuccessStatusCode)
+                string localPath = url.StartsWith("file://", StringComparison.OrdinalIgnoreCase)
+                    ? new Uri(url).LocalPath
+                    : url;
+
+                if (!File.Exists(localPath))
                 {
+                    return new UpdateCheckResult
+                    {
+                        Status = UpdateStatus.NetworkError,
+                        CurrentVersion = CurrentVersion,
+                        Message = $"Arquivo de manifesto de teste não encontrado: {localPath}"
+                    };
+                }
+
+                jsonContent = await File.ReadAllTextAsync(localPath);
+            }
+            else
+            {
+                // 3. Consulta HTTP remota com tratamento robusto para modo offline / falhas de rede
+                var client = httpClient ?? SharedHttpClient;
+                try
+                {
+                    using var response = await client.GetAsync(url);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        return new UpdateCheckResult
+                        {
+                            Status = UpdateStatus.NetworkError,
+                            CurrentVersion = CurrentVersion,
+                            Message = "Não foi possível verificar atualizações agora. O CobraPix continuará funcionando normalmente."
+                        };
+                    }
+
+                    jsonContent = await response.Content.ReadAsStringAsync();
+                }
+                catch (TaskCanceledException)
+                {
+                    // Timeout controlado
                     return new UpdateCheckResult
                     {
                         Status = UpdateStatus.NetworkError,
@@ -123,42 +213,35 @@ namespace CobraPix_PC.Services
                         Message = "Não foi possível verificar atualizações agora. O CobraPix continuará funcionando normalmente."
                     };
                 }
-
-                jsonContent = await response.Content.ReadAsStringAsync();
-            }
-            catch (TaskCanceledException)
-            {
-                // Timeout controlado
-                return new UpdateCheckResult
+                catch (HttpRequestException)
                 {
-                    Status = UpdateStatus.NetworkError,
-                    CurrentVersion = CurrentVersion,
-                    Message = "Não foi possível verificar atualizações agora. O CobraPix continuará funcionando normalmente."
-                };
-            }
-            catch (HttpRequestException)
-            {
-                // Sem conexão com a internet ou servidor inacessível
-                return new UpdateCheckResult
+                    // Sem conexão com a internet ou servidor inacessível
+                    return new UpdateCheckResult
+                    {
+                        Status = UpdateStatus.NetworkError,
+                        CurrentVersion = CurrentVersion,
+                        Message = "Não foi possível verificar atualizações agora. O CobraPix continuará funcionando normalmente."
+                    };
+                }
+                catch (Exception)
                 {
-                    Status = UpdateStatus.NetworkError,
-                    CurrentVersion = CurrentVersion,
-                    Message = "Não foi possível verificar atualizações agora. O CobraPix continuará funcionando normalmente."
-                };
-            }
-            catch (Exception)
-            {
-                // Falha genérica de rede
-                return new UpdateCheckResult
-                {
-                    Status = UpdateStatus.NetworkError,
-                    CurrentVersion = CurrentVersion,
-                    Message = "Não foi possível verificar atualizações agora. O CobraPix continuará funcionando normalmente."
-                };
+                    // Falha genérica de rede
+                    return new UpdateCheckResult
+                    {
+                        Status = UpdateStatus.NetworkError,
+                        CurrentVersion = CurrentVersion,
+                        Message = "Não foi possível verificar atualizações agora. O CobraPix continuará funcionando normalmente."
+                    };
+                }
             }
 
             // 4. Avaliação e comparação SemVer do manifesto
-            return EvaluateManifestJson(jsonContent, CurrentVersion);
+            var result = EvaluateManifestJson(jsonContent, CurrentVersion);
+            if (IsTestEnvironmentActive && result.Status == UpdateStatus.UpdateAvailable)
+            {
+                result.Message = $"[AMBIENTE DE TESTE] {result.Message}";
+            }
+            return result;
         }
 
         public UpdateCheckResult EvaluateManifestJson(string manifestJson, string localVersion = AppVersionInfo.CurrentVersion)
@@ -218,7 +301,11 @@ namespace CobraPix_PC.Services
                 }
 
                 downloadUrl = dlProp.GetString()!.Trim();
-                if (!downloadUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                bool isLocalTestDl = IsTestEnvironmentActive &&
+                    (downloadUrl.StartsWith("file://", StringComparison.OrdinalIgnoreCase) ||
+                     (Path.IsPathRooted(downloadUrl) && File.Exists(downloadUrl)));
+
+                if (!downloadUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase) && !isLocalTestDl)
                 {
                     return new UpdateCheckResult
                     {
@@ -279,6 +366,17 @@ namespace CobraPix_PC.Services
                     }
                 }
 
+                // packageSizeBytes / size (quando disponível)
+                long? packageSizeBytes = null;
+                if (root.TryGetProperty("packageSizeBytes", out var sizeProp) && sizeProp.TryGetInt64(out long sVal))
+                {
+                    packageSizeBytes = sVal;
+                }
+                else if (root.TryGetProperty("size", out var sizeProp2) && sizeProp2.TryGetInt64(out long sVal2))
+                {
+                    packageSizeBytes = sVal2;
+                }
+
                 // Comparação SemVer canônica
                 int cmp = AppVersionInfo.CompareVersions(remoteVersion, localVersion);
                 if (cmp > 0)
@@ -290,6 +388,7 @@ namespace CobraPix_PC.Services
                         RemoteVersion = remoteVersion,
                         DownloadUrl = downloadUrl,
                         Sha256 = sha256,
+                        PackageSizeBytes = packageSizeBytes,
                         ReleaseNotes = releaseNotes,
                         Mandatory = mandatory,
                         Message = "Nova versão disponível"
@@ -303,6 +402,7 @@ namespace CobraPix_PC.Services
                     RemoteVersion = remoteVersion,
                     DownloadUrl = downloadUrl,
                     Sha256 = sha256,
+                    PackageSizeBytes = packageSizeBytes,
                     ReleaseNotes = releaseNotes,
                     Mandatory = mandatory,
                     Message = "Você já está usando a versão mais recente do CobraPix."

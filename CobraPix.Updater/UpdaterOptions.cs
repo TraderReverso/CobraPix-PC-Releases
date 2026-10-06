@@ -14,6 +14,7 @@ namespace CobraPix.Updater
         public string MainExeName { get; set; } = "CobraPix PC.exe";
         public bool SkipWait { get; set; }
         public bool NoRestart { get; set; }
+        public bool Silent { get; set; }
         public int TimeoutSeconds { get; set; } = 25;
 
         public static bool TryParse(string[] args, out UpdaterOptions options, out string errorMessage)
@@ -62,6 +63,10 @@ namespace CobraPix.Updater
                 else if (arg.Equals("--no-restart", StringComparison.OrdinalIgnoreCase))
                 {
                     options.NoRestart = true;
+                }
+                else if (arg.Equals("--silent", StringComparison.OrdinalIgnoreCase))
+                {
+                    options.Silent = true;
                 }
                 else if (arg.Equals("--timeout-seconds", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
                 {

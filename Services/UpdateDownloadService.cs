@@ -48,19 +48,27 @@ namespace CobraPix_PC.Services
             }
 
             string cleanUrl = downloadUrl.Trim();
-            if (!cleanUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            bool isLocalTestUrl = UpdateService.IsTestEnvironmentActive &&
+                (cleanUrl.StartsWith("file://", StringComparison.OrdinalIgnoreCase) ||
+                 (Path.IsPathRooted(cleanUrl) && File.Exists(cleanUrl)));
+
+            if (!cleanUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase) && !isLocalTestUrl)
             {
                 return UpdateDownloadResult.CreateFailure(
                     "Conexão HTTP insegura rejeitada.",
                     "Por motivos de segurança, o download de atualizações exige conexão HTTPS criptografada.");
             }
 
-            if (!Uri.TryCreate(cleanUrl, UriKind.Absolute, out var validatedUri) ||
-                (validatedUri.Scheme != Uri.UriSchemeHttps))
+            Uri? validatedUri = null;
+            if (!isLocalTestUrl)
             {
-                return UpdateDownloadResult.CreateFailure(
-                    "URL de download em formato inválido.",
-                    "A URL informada para o download não é válida.");
+                if (!Uri.TryCreate(cleanUrl, UriKind.Absolute, out validatedUri) ||
+                    (validatedUri.Scheme != Uri.UriSchemeHttps))
+                {
+                    return UpdateDownloadResult.CreateFailure(
+                        "URL de download em formato inválido.",
+                        "A URL informada para o download não é válida.");
+                }
             }
 
             // 2. Validação obrigatória do hash SHA-256 no manifesto
@@ -77,7 +85,27 @@ namespace CobraPix_PC.Services
             string cleanVersion = string.IsNullOrWhiteSpace(version) ? "unknown" : version.Trim();
 
             // 4. Preparação do diretório e nomes de arquivo temporários
-            string targetFileName = $"CobraPix-PC-{cleanVersion}-win-x64.zip";
+            // O novo formato comercial oficial é o instalador executável (.exe)
+            string extractedFileName = string.Empty;
+            if (Uri.TryCreate(cleanUrl, UriKind.Absolute, out var parsedUri))
+            {
+                extractedFileName = Path.GetFileName(parsedUri.LocalPath);
+            }
+            else if (!string.IsNullOrWhiteSpace(cleanUrl))
+            {
+                extractedFileName = Path.GetFileName(cleanUrl);
+            }
+
+            string targetFileName;
+            if (!string.IsNullOrWhiteSpace(extractedFileName) && (extractedFileName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || extractedFileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)))
+            {
+                targetFileName = Uri.UnescapeDataString(extractedFileName);
+            }
+            else
+            {
+                targetFileName = $"CobraPix-PC-Setup-{cleanVersion}.exe";
+            }
+
             string targetFilePath;
             string tempPartFilePath;
 
@@ -108,13 +136,83 @@ namespace CobraPix_PC.Services
             // Remove resquício parcial de download anterior
             TryDeleteFile(tempPartFilePath);
 
+            // Ramo específico para ambiente de teste local (opera 100% offline)
+            if (isLocalTestUrl)
+            {
+                string sourcePath = cleanUrl.StartsWith("file://", StringComparison.OrdinalIgnoreCase)
+                    ? new Uri(cleanUrl).LocalPath
+                    : cleanUrl;
+
+                if (!File.Exists(sourcePath))
+                {
+                    return UpdateDownloadResult.CreateFailure(
+                        "Arquivo de pacote de teste não encontrado.",
+                        $"O arquivo de teste em '{sourcePath}' não foi encontrado.");
+                }
+
+                try
+                {
+                    using (var sourceStream = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                    using (var fileStream = new FileStream(tempPartFilePath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true))
+                    {
+                        byte[] buffer = new byte[81920];
+                        long totalBytes = sourceStream.Length;
+                        long totalBytesRead = 0;
+                        int bytesRead;
+
+                        while ((bytesRead = await sourceStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
+                        {
+                            await fileStream.WriteAsync(buffer, 0, bytesRead, cancellationToken);
+                            totalBytesRead += bytesRead;
+                            if (totalBytes > 0)
+                            {
+                                double percentage = Math.Round((double)totalBytesRead / totalBytes * 100.0, 1);
+                                progress?.Report(new UpdateDownloadProgress(totalBytesRead, totalBytes, percentage));
+                            }
+                        }
+
+                        // Notifica conclusão da leitura e início da validação de integridade criptográfica
+                        progress?.Report(new UpdateDownloadProgress(totalBytes, totalBytes, 100.0)
+                        {
+                            ProgressText = "Validando integridade (SHA-256)..."
+                        });
+                    }
+
+                    // Validação Criptográfica de Integridade via SHA-256
+                    string testHash = _updateService.ComputeFileSha256(tempPartFilePath);
+                    if (!string.Equals(testHash, cleanExpectedSha, StringComparison.OrdinalIgnoreCase))
+                    {
+                        TryDeleteFile(tempPartFilePath);
+                        return UpdateDownloadResult.CreateFailure(
+                            $"SHA-256 divergente. Calculado={testHash}, Esperado={cleanExpectedSha}",
+                            "Não foi possível validar a atualização de teste. O hash SHA-256 diverge do esperado.",
+                            testHash,
+                            cleanExpectedSha);
+                    }
+
+                    TryDeleteFile(targetFilePath);
+                    File.Move(tempPartFilePath, targetFilePath);
+                    return UpdateDownloadResult.CreateSuccess(targetFilePath, testHash, cleanExpectedSha);
+                }
+                catch (OperationCanceledException)
+                {
+                    TryDeleteFile(tempPartFilePath);
+                    return UpdateDownloadResult.CreateCancelled();
+                }
+                catch (Exception ex)
+                {
+                    TryDeleteFile(tempPartFilePath);
+                    return UpdateDownloadResult.CreateFailure(ex.Message, "Falha ao processar pacote de teste local.");
+                }
+            }
+
             var client = httpClient ?? SharedHttpClient;
 
             try
             {
                 // 5. Início da requisição HTTP (lendo apenas os headers primeiro para obter o tamanho)
                 using var response = await client.GetAsync(
-                    validatedUri,
+                    validatedUri!,
                     HttpCompletionOption.ResponseHeadersRead,
                     cancellationToken);
 
@@ -126,13 +224,13 @@ namespace CobraPix_PC.Services
                 }
 
                 long? totalBytes = response.Content.Headers.ContentLength;
+                long totalBytesRead = 0;
 
                 // 6. Download streaming com cálculo de progresso
                 using (var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken))
                 using (var fileStream = new FileStream(tempPartFilePath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true))
                 {
                     byte[] buffer = new byte[81920];
-                    long totalBytesRead = 0;
                     int bytesRead;
 
                     while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
@@ -161,6 +259,12 @@ namespace CobraPix_PC.Services
                             "O arquivo de atualização recebido está vazio. O download foi descartado.");
                     }
                 }
+
+                // Notifica conclusão da leitura e início da validação de integridade criptográfica
+                progress?.Report(new UpdateDownloadProgress(totalBytesRead, totalBytes, 100.0)
+                {
+                    ProgressText = "Validando integridade (SHA-256)..."
+                });
 
                 // 7. Validação Criptográfica de Integridade via SHA-256
                 string computedHash = _updateService.ComputeFileSha256(tempPartFilePath);

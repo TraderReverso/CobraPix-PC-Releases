@@ -88,6 +88,31 @@ namespace CobraPix_PC.Services.Interfaces
         decimal AnnualPrice { get; }
 
         /// <summary>
+        /// Obtém o status e detalhes da licença criptográfica PRO atualmente instalada.
+        /// </summary>
+        Task<LicenseValidationResult> GetCurrentLicenseStatusAsync();
+
+        /// <summary>
+        /// Ativa uma chave de licença PRO no aplicativo.
+        /// </summary>
+        Task<LicenseValidationResult> ActivateLicenseAsync(string rawKey);
+
+        /// <summary>
+        /// Número oficial do WhatsApp de suporte comercial para recebimento de comprovantes.
+        /// </summary>
+        string SupportPhoneNumber { get; }
+
+        /// <summary>
+        /// Mensagem padrão para abertura de suporte comercial no WhatsApp.
+        /// </summary>
+        string SupportWhatsAppMessage { get; }
+
+        /// <summary>
+        /// Serviço de licenças criptográficas.
+        /// </summary>
+        ILicenseService LicenseService { get; }
+
+        /// <summary>
         /// Evento disparado quando o plano comercial é alterado.
         /// </summary>
         event EventHandler? PlanChanged;

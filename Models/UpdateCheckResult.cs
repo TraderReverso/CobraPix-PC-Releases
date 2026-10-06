@@ -81,6 +81,11 @@ namespace CobraPix_PC.Models
         public bool Mandatory { get; set; }
 
         /// <summary>
+        /// Tamanho estimado do pacote em bytes reportado pelo manifesto (quando disponível).
+        /// </summary>
+        public long? PackageSizeBytes { get; set; }
+
+        /// <summary>
         /// Mensagem explicativa amigável para exibição ao usuário.
         /// </summary>
         public string Message { get; set; } = string.Empty;

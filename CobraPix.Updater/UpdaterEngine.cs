@@ -8,9 +8,9 @@ using System.Threading;
 namespace CobraPix.Updater
 {
     /// <summary>
-    /// Motor responsável por todo o ciclo de instalação segura de atualizações:
-    /// Espera do PID anterior -> Backup da aplicação -> Validação e Staging -> Substituição controlada -> Verificação -> Reinício / Rollback.
-    /// Totalmente desacoplado de banco de dados e ViewModels.
+    /// NOTA ARQUITETURAL: Mecanismo legado baseado em substituição direta de arquivos.
+    /// O fluxo comercial oficial utiliza o instalador Inno Setup silencioso.
+    /// Mantido para testes e retrocompatibilidade controlada.
     /// </summary>
     public class UpdaterEngine
     {
@@ -282,7 +282,7 @@ namespace CobraPix.Updater
                 }
 
                 string targetFilePath = Path.Combine(target.FullName, file.Name);
-                file.CopyTo(targetFilePath, overwrite: true);
+                SafeCopyFile(file, targetFilePath);
             }
 
             foreach (var subDir in source.GetDirectories())
@@ -296,6 +296,140 @@ namespace CobraPix.Updater
 
                 var nextTargetSubDir = target.CreateSubdirectory(subDir.Name);
                 CopyDirectoryRecursive(subDir, nextTargetSubDir);
+            }
+        }
+
+        /// <summary>
+        /// Verifica se o processo atual está executando com privilégios de Administrador.
+        /// </summary>
+        public static bool IsRunningAsAdministrator()
+        {
+            if (!OperatingSystem.IsWindows()) return true;
+            try
+            {
+                using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+                var principal = new System.Security.Principal.WindowsPrincipal(identity);
+                return principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Determina se o diretório alvo exige privilégios de Administrador (UAC) para substituição de arquivos.
+        /// </summary>
+        public static bool RequiresElevation(string? directory)
+        {
+            if (string.IsNullOrWhiteSpace(directory)) return false;
+
+            try
+            {
+                string normalized = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+                string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                if (!string.IsNullOrEmpty(programFiles))
+                {
+                    string normPF = Path.GetFullPath(programFiles).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                    if (normalized.Equals(normPF, StringComparison.OrdinalIgnoreCase) ||
+                        normalized.StartsWith(normPF + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+
+                string programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+                if (!string.IsNullOrEmpty(programFilesX86))
+                {
+                    string normPFX86 = Path.GetFullPath(programFilesX86).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                    if (normalized.Equals(normPFX86, StringComparison.OrdinalIgnoreCase) ||
+                        normalized.StartsWith(normPFX86 + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+
+                string systemDir = Environment.GetFolderPath(Environment.SpecialFolder.System);
+                if (!string.IsNullOrEmpty(systemDir))
+                {
+                    string normSys = Path.GetFullPath(systemDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                    if (normalized.Equals(normSys, StringComparison.OrdinalIgnoreCase) ||
+                        normalized.StartsWith(normSys + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+
+                if (Directory.Exists(normalized))
+                {
+                    string probePath = Path.Combine(normalized, $".uac_probe_{Guid.NewGuid():N}.tmp");
+                    try
+                    {
+                        using (var fs = new FileStream(probePath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                        {
+                            fs.WriteByte(0);
+                        }
+                        File.Delete(probePath);
+                        return false;
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                        return true;
+                    }
+                    catch
+                    {
+                        return false;
+                    }
+                }
+            }
+            catch
+            {
+                // Fallback seguro
+            }
+
+            return false;
+        }
+
+        private static void SafeCopyFile(FileInfo file, string targetFilePath)
+        {
+            try
+            {
+                file.CopyTo(targetFilePath, overwrite: true);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                throw new UnauthorizedAccessException($"Acesso negado ao gravar '{Path.GetFileName(targetFilePath)}' em '{Path.GetDirectoryName(targetFilePath)}'. O diretório de instalação exige permissões de Administrador (UAC).", ex);
+            }
+            catch (IOException)
+            {
+                // Se o arquivo estiver em uso (ex: o próprio executável ou DLL do atualizador em execução no Windows),
+                // tenta a estratégia padrão de renomear o arquivo em execução para .old e gravar o novo.
+                string oldFilePath = targetFilePath + ".old";
+                try
+                {
+                    if (File.Exists(oldFilePath))
+                    {
+                        File.Delete(oldFilePath);
+                    }
+                }
+                catch { }
+
+                try
+                {
+                    File.Move(targetFilePath, oldFilePath);
+                    file.CopyTo(targetFilePath, overwrite: true);
+                }
+                catch
+                {
+                    // Se o arquivo for do próprio atualizador e já estiver em execução/presente no destino,
+                    // ignora a substituição para permitir a atualização bem-sucedida de todos os demais arquivos da aplicação.
+                    if (file.Name.StartsWith("CobraPix.Updater", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return;
+                    }
+                    throw;
+                }
             }
         }
 

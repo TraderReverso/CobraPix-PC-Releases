@@ -7,10 +7,10 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <Version>1.0.1</Version>
-    <AssemblyVersion>1.0.1.0</AssemblyVersion>
-    <FileVersion>1.0.1.0</FileVersion>
-    <InformationalVersion>1.0.1</InformationalVersion>
+    <Version>1.0.3</Version>
+    <AssemblyVersion>1.0.3.0</AssemblyVersion>
+    <FileVersion>1.0.3.0</FileVersion>
+    <InformationalVersion>1.0.3</InformationalVersion>
     <ApplicationIcon>Assets\app_icon.ico</ApplicationIcon>
   </PropertyGroup>
 
@@ -34,6 +34,12 @@
   <ItemGroup>
     <Compile Remove="CobraPix.Updater\**" />
     <None Remove="CobraPix.Updater\**" />
+    <Compile Remove="CobraPix.LicenseGenerator\**" />
+    <None Remove="CobraPix.LicenseGenerator\**" />
+    <Compile Remove="keys\**" />
+    <None Remove="keys\**" />
+    <Content Remove="keys\**" />
+    <EmbeddedResource Remove="keys\**" />
   </ItemGroup>
 
   <ItemGroup>

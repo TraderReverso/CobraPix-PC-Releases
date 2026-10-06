@@ -1215,6 +1215,36 @@
                                     </Grid>
                                 </Border>
 
+                                <!-- Informações da Licença Ativa -->
+                                <Border Background="{DynamicResource SurfaceBrush}"
+                                        BorderBrush="{DynamicResource ProBadgeBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="6"
+                                        Padding="16,12"
+                                        Margin="0,0,0,18">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HasInstalledLicense}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="👑 Licença CobraPix PRO Ativa" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource ProBadgeBrush}" />
+                                            <TextBlock Text="{Binding LicenseDetailsText}" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,2,0,0" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1" Text="{Binding LicenseExpirationText}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" />
+                                    </Grid>
+                                </Border>
+
                                 <!-- Opções de Upgrade PRO (Mensal e Anual) -->
                                 <Grid Margin="0,0,0,16">
                                     <Grid.ColumnDefinitions>
@@ -1368,15 +1398,25 @@
                                                 <TextBlock Text="✨ " FontSize="16" VerticalAlignment="Center" />
                                                 <TextBlock Text="{Binding RemoteVersionText}" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" />
                                             </StackPanel>
-                                            <Border Grid.Column="1"
-                                                    Background="#2210B981"
-                                                    BorderBrush="#10B981"
-                                                    BorderThickness="1"
-                                                    CornerRadius="4"
-                                                    Padding="8,2"
-                                                    Visibility="{Binding HasRemoteSha256, Converter={StaticResource BoolToVis}}">
-                                                <TextBlock Text="🔒 SHA-256 Verificado" FontSize="11" FontWeight="Bold" Foreground="#10B981" />
-                                            </Border>
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                                <Border Background="{DynamicResource SurfaceBrush}"
+                                                        BorderBrush="{DynamicResource BorderDarkBrush}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="4"
+                                                        Padding="8,2"
+                                                        Margin="0,0,8,0"
+                                                        Visibility="{Binding HasPackageSizeText, Converter={StaticResource BoolToVis}}">
+                                                    <TextBlock Text="{Binding PackageSizeText, StringFormat='📦 {0}'}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                                </Border>
+                                                <Border Background="#2210B981"
+                                                        BorderBrush="#10B981"
+                                                        BorderThickness="1"
+                                                        CornerRadius="4"
+                                                        Padding="8,2"
+                                                        Visibility="{Binding HasRemoteSha256, Converter={StaticResource BoolToVis}}">
+                                                    <TextBlock Text="🔒 SHA-256 Verificado" FontSize="11" FontWeight="Bold" Foreground="#10B981" />
+                                                </Border>
+                                            </StackPanel>
                                         </Grid>
 
                                         <!-- Hash SHA-256 do pacote remoto quando disponível -->
@@ -1488,7 +1528,7 @@
                                                 CornerRadius="6"
                                                 Padding="16"
                                                 Margin="0,0,0,8"
-                                                Visibility="{Binding IsDownloadCompleted, Converter={StaticResource BoolToVis}}">
+                                                Visibility="{Binding CanApplyUpdate, Converter={StaticResource BoolToVis}}">
                                             <StackPanel>
                                                 <Grid Margin="0,0,0,8">
                                                     <Grid.ColumnDefinitions>

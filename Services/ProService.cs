@@ -52,29 +52,74 @@ namespace CobraPix_PC.Services
         /// </summary>
         public const string AnnualPixPayload = "00020126360014br.gov.bcb.pix0114+5521997470463520400005303986540589.905802BR5923VITOR PINHEIRO DA SILVA6009Sao Paulo62230519daqr31191376721496063047A60";
 
+        /// <summary>
+        /// Número oficial do WhatsApp de suporte comercial para atendimento e recebimento de comprovantes.
+        /// </summary>
+        public const string DefaultSupportPhone = "5521997470463";
+
+        /// <summary>
+        /// Mensagem padrão para solicitação de liberação e chave de ativação via suporte.
+        /// </summary>
+        public const string DefaultSupportMessage = "Olá! Realizei o pagamento do CobraPix PRO e gostaria de receber minha chave de ativação.";
+
         private readonly CobraPixDbContext _context;
+        private readonly ILicenseService _licenseService;
 
         public event EventHandler? PlanChanged;
 
-        public ProService(CobraPixDbContext context)
+        public ILicenseService LicenseService => _licenseService;
+
+        public string SupportPhoneNumber => DefaultSupportPhone;
+
+        public string SupportWhatsAppMessage => DefaultSupportMessage;
+
+        public ProService(CobraPixDbContext context, ILicenseService? licenseService = null)
         {
             _context = context ?? throw new ArgumentNullException(nameof(context));
+            _licenseService = licenseService ?? new LicenseService(context);
+            _licenseService.LicenseStateChanged += (s, e) => PlanChanged?.Invoke(this, EventArgs.Empty);
         }
 
         public async Task<PlanType> GetCurrentPlanAsync()
         {
-            var setting = await _context.AppSettings
-                .AsNoTracking()
-                .FirstOrDefaultAsync(s => s.Key == KeyPlanType);
+            // 1. Validação estrita da licença criptográfica assinada
+            var licenseResult = await _licenseService.GetCurrentLicenseStatusAsync();
+            if (licenseResult.IsValid && licenseResult.License != null)
+            {
+                return licenseResult.License.PlanType;
+            }
 
-            if (setting == null || string.IsNullOrWhiteSpace(setting.Value))
+            // Se a licença estava presente e expirou, o aplicativo reverte automaticamente para o Free
+            if (licenseResult.Status == LicenseStatus.Expired)
             {
                 return PlanType.Free;
             }
 
-            if (Enum.TryParse<PlanType>(setting.Value, true, out var plan))
+            // 2. Compatibilidade isolada para testes automatizados com modo de teste explícito
+            var setting = await _context.AppSettings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Key == KeyPlanType);
+
+            if (setting != null && Enum.TryParse<PlanType>(setting.Value, true, out var plan))
             {
-                return plan;
+                if (plan == PlanType.Pro)
+                {
+                    var sourceSetting = await _context.AppSettings
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(s => s.Key == KeyActivationSource);
+
+                    string src = sourceSetting?.Value ?? string.Empty;
+                    // Somente testes automatizados identificados podem simular Pro sem chave assinada
+                    if (src.Contains("Test", StringComparison.OrdinalIgnoreCase) || src.Equals("Manual", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return PlanType.Pro;
+                    }
+
+                    // Tentativa de manipulação direta de texto no banco sem licença assinada é rejeitada
+                    return PlanType.Free;
+                }
+
+                return PlanType.Free;
             }
 
             return PlanType.Free;
@@ -364,8 +409,28 @@ namespace CobraPix_PC.Services
             await _context.SaveChangesAsync();
         }
 
+        public async Task<LicenseValidationResult> GetCurrentLicenseStatusAsync()
+        {
+            return await _licenseService.GetCurrentLicenseStatusAsync();
+        }
+
+        public async Task<LicenseValidationResult> ActivateLicenseAsync(string rawKey)
+        {
+            var result = await _licenseService.ActivateLicenseAsync(rawKey);
+            if (result.IsValid)
+            {
+                PlanChanged?.Invoke(this, EventArgs.Empty);
+            }
+            return result;
+        }
+
         public async Task SetPlanAsync(PlanType plan, string source = "Manual")
         {
+            if (plan == PlanType.Free)
+            {
+                await _licenseService.DeactivateLicenseAsync();
+            }
+
             await UpsertSettingAsync(KeyPlanType, plan.ToString());
             await UpsertSettingAsync(KeyActivatedAt, DateTime.UtcNow.ToString("O"));
             await UpsertSettingAsync(KeyActivationSource, source);

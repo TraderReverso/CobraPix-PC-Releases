@@ -13,16 +13,25 @@ namespace CobraPix_PC.ViewModels.Modules
 {
     /// <summary>
     /// ViewModel do módulo informativo e de gestão do CobraPix PRO.
-    /// Exibe status do plano, benefícios e links para adesão.
+    /// Exibe status do plano, benefícios, checkout via Mercado Pago / Pix,
+    /// canal de suporte via WhatsApp e ativação de licença assinada.
     /// </summary>
     public class ProViewModel : ModuleViewModelBase
     {
         private readonly IProService? _proService;
+        private readonly IWhatsAppService? _whatsAppService;
 
         private PlanType _currentPlan = PlanType.Free;
         private int _activeClientsCount;
         private string? _statusMessage;
         private bool _isLoading;
+
+        // Propriedades de Ativação de Licença
+        private string _licenseKeyInput = string.Empty;
+        private bool _isActivating;
+        private string? _activationErrorMessage;
+        private string? _activationSuccessMessage;
+        private LicenseInfo? _currentLicense;
 
         public override string Title => "CobraPix PRO";
         public override string Description => "Recursos ilimitados, clientes ativos sem limite e ferramentas premium.";
@@ -40,13 +49,15 @@ namespace CobraPix_PC.ViewModels.Modules
                     OnPropertyChanged(nameof(IsFree));
                     OnPropertyChanged(nameof(PlanBadgeText));
                     OnPropertyChanged(nameof(ActiveClientsSummary));
+                    OnPropertyChanged(nameof(LicenseStatusBadgeText));
                 }
             }
         }
 
         public bool IsPro => CurrentPlan == PlanType.Pro;
         public bool IsFree => CurrentPlan == PlanType.Free;
-        public string PlanBadgeText => IsPro ? "PRO ATIVO" : "PLANO FREE";
+        public string PlanBadgeText => IsPro ? "COBRAPIX PRO ATIVO" : "COBRAPIX FREE";
+        public string LicenseStatusBadgeText => IsPro ? "👑 COBRAPIX PRO ATIVO" : "COBRAPIX FREE";
 
         public int ActiveClientsCount
         {
@@ -87,7 +98,101 @@ namespace CobraPix_PC.ViewModels.Modules
             set => SetProperty(ref _isLoading, value);
         }
 
+        // ==========================================
+        // Propriedades de Licença e Ativação
+        // ==========================================
+        public string LicenseKeyInput
+        {
+            get => _licenseKeyInput;
+            set
+            {
+                if (SetProperty(ref _licenseKeyInput, value))
+                {
+                    if (HasActivationError)
+                    {
+                        ActivationErrorMessage = null;
+                    }
+                }
+            }
+        }
+
+        public bool IsActivating
+        {
+            get => _isActivating;
+            set
+            {
+                if (SetProperty(ref _isActivating, value))
+                {
+                    OnPropertyChanged(nameof(CanActivate));
+                    (ActivateLicenseCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                }
+            }
+        }
+
+        public bool CanActivate => !IsActivating;
+
+        public string? ActivationErrorMessage
+        {
+            get => _activationErrorMessage;
+            set
+            {
+                if (SetProperty(ref _activationErrorMessage, value))
+                {
+                    OnPropertyChanged(nameof(HasActivationError));
+                }
+            }
+        }
+
+        public bool HasActivationError => !string.IsNullOrEmpty(ActivationErrorMessage);
+
+        public string? ActivationSuccessMessage
+        {
+            get => _activationSuccessMessage;
+            set
+            {
+                if (SetProperty(ref _activationSuccessMessage, value))
+                {
+                    OnPropertyChanged(nameof(HasActivationSuccess));
+                }
+            }
+        }
+
+        public bool HasActivationSuccess => !string.IsNullOrEmpty(ActivationSuccessMessage);
+
+        public LicenseInfo? CurrentLicense
+        {
+            get => _currentLicense;
+            set
+            {
+                if (SetProperty(ref _currentLicense, value))
+                {
+                    OnPropertyChanged(nameof(HasInstalledLicense));
+                    OnPropertyChanged(nameof(LicenseIdText));
+                    OnPropertyChanged(nameof(LicensePlanTypeText));
+                    OnPropertyChanged(nameof(LicenseExpirationText));
+                }
+            }
+        }
+
+        public bool HasInstalledLicense => CurrentLicense != null;
+
+        public string LicenseIdText => CurrentLicense != null
+            ? $"Identificador: {CurrentLicense.LicenseId}"
+            : string.Empty;
+
+        public string LicensePlanTypeText => CurrentLicense != null
+            ? CurrentLicense.PlanDisplayName
+            : (IsPro ? "CobraPix PRO" : "Plano Free");
+
+        public string LicenseExpirationText => CurrentLicense != null
+            ? $"Válida até {CurrentLicense.FormattedExpirationDate} ({CurrentLicense.RemainingDays} dias restantes)"
+            : string.Empty;
+
+        public string SupportPhoneFormatted => "(21) 99747-0463";
+
+        // ==========================================
         // Propriedades do Modal Pix
+        // ==========================================
         private bool _isPixModalOpen;
         private string _pixModalTitle = "Pagamento via Pix";
         private string _pixModalPlanName = "CobraPix PRO";
@@ -167,9 +272,18 @@ namespace CobraPix_PC.ViewModels.Modules
 
         public bool HasPixCopyFeedback => IsPixCopied && !string.IsNullOrEmpty(PixCopyFeedback);
 
+        // Ações e Callbacks
         public Action<string>? OpenBrowserAction { get; set; }
         public Action<string>? CopyToClipboardAction { get; set; }
+        public Func<string?>? GetClipboardTextAction { get; set; }
+        public Action<string, string>? ContactSupportAction { get; set; }
 
+        // Comandos de Licença e Suporte
+        public ICommand ActivateLicenseCommand { get; }
+        public ICommand PasteLicenseKeyCommand { get; }
+        public ICommand ContactSupportCommand { get; }
+
+        // Comandos existentes
         public ICommand RefreshPlanCommand { get; }
         public ICommand OpenMonthlySubscriptionCommand { get; }
         public ICommand OpenAnnualSubscriptionCommand { get; }
@@ -179,18 +293,24 @@ namespace CobraPix_PC.ViewModels.Modules
         public ICommand ClosePixModalCommand { get; }
 
         public ProViewModel()
-            : this(App.Services?.GetService<IProService>() ?? new ProService(new CobraPixDbContext()))
+            : this(App.Services?.GetService<IProService>() ?? new ProService(new CobraPixDbContext()),
+                   App.Services?.GetService<IWhatsAppService>() ?? new WhatsAppService())
         {
         }
 
-        public ProViewModel(IProService? proService)
+        public ProViewModel(IProService? proService, IWhatsAppService? whatsAppService = null)
         {
             _proService = proService;
+            _whatsAppService = whatsAppService ?? new WhatsAppService();
 
             if (_proService != null)
             {
                 _proService.PlanChanged += (s, e) => { _ = LoadPlanDataAsync(); };
             }
+
+            ActivateLicenseCommand = new RelayCommand(async () => await ActivateLicenseAsync(), () => !IsActivating);
+            PasteLicenseKeyCommand = new RelayCommand(PasteLicenseKeyFromClipboard);
+            ContactSupportCommand = new RelayCommand(ContactSupportViaWhatsApp);
 
             RefreshPlanCommand = new RelayCommand(async () => await LoadPlanDataAsync());
             OpenMonthlySubscriptionCommand = new RelayCommand(async () => await HandleSubscriptionClickAsync(isAnnual: false));
@@ -202,6 +322,102 @@ namespace CobraPix_PC.ViewModels.Modules
             ClosePixModalCommand = new RelayCommand(ClosePixModal);
 
             _ = LoadPlanDataAsync();
+        }
+
+        public async Task ActivateLicenseAsync()
+        {
+            ActivationErrorMessage = null;
+            ActivationSuccessMessage = null;
+
+            if (string.IsNullOrWhiteSpace(LicenseKeyInput))
+            {
+                ActivationErrorMessage = "Por favor, informe ou cole sua chave de ativação.";
+                return;
+            }
+
+            if (_proService == null)
+            {
+                ActivationErrorMessage = "Serviço de licenças indisponível no momento.";
+                return;
+            }
+
+            IsActivating = true;
+            try
+            {
+                var result = await _proService.ActivateLicenseAsync(LicenseKeyInput);
+                if (result.IsValid && result.License != null)
+                {
+                    CurrentLicense = result.License;
+                    CurrentPlan = result.License.PlanType;
+                    LicenseKeyInput = string.Empty;
+                    ActivationSuccessMessage = $"Parabéns! Sua licença {result.License.PlanDisplayName} foi ativada com sucesso! Válida até {result.License.FormattedExpirationDate}.";
+                    await LoadPlanDataAsync();
+                }
+                else
+                {
+                    ActivationErrorMessage = result.ErrorMessage;
+                }
+            }
+            catch (Exception ex)
+            {
+                ActivationErrorMessage = "Erro ao ativar licença: " + ex.Message;
+            }
+            finally
+            {
+                IsActivating = false;
+            }
+        }
+
+        public void PasteLicenseKeyFromClipboard()
+        {
+            try
+            {
+                string? text = null;
+                if (GetClipboardTextAction != null)
+                {
+                    text = GetClipboardTextAction.Invoke();
+                }
+                else
+                {
+                    if (System.Windows.Clipboard.ContainsText())
+                    {
+                        text = System.Windows.Clipboard.GetText();
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    LicenseKeyInput = text.Trim();
+                    ActivationErrorMessage = null;
+                    ActivationSuccessMessage = null;
+                }
+            }
+            catch
+            {
+                // Silencioso se clipboard estiver bloqueado por outro processo do Windows
+            }
+        }
+
+        public void ContactSupportViaWhatsApp()
+        {
+            string phone = _proService?.SupportPhoneNumber ?? ProService.DefaultSupportPhone;
+            string message = _proService?.SupportWhatsAppMessage ?? ProService.DefaultSupportMessage;
+
+            if (ContactSupportAction != null)
+            {
+                ContactSupportAction.Invoke(phone, message);
+                return;
+            }
+
+            if (_whatsAppService != null)
+            {
+                _whatsAppService.OpenWhatsApp(phone, message);
+            }
+            else
+            {
+                var ws = new WhatsAppService();
+                ws.OpenWhatsApp(phone, message);
+            }
         }
 
         public void OpenPixModal(bool isAnnual)
@@ -273,6 +489,16 @@ namespace CobraPix_PC.ViewModels.Modules
                 var status = await _proService.CheckClientLimitAsync();
                 CurrentPlan = status.Plan;
                 ActiveClientsCount = status.ActiveClientsCount;
+
+                var licResult = await _proService.GetCurrentLicenseStatusAsync();
+                if (licResult.IsValid && licResult.License != null)
+                {
+                    CurrentLicense = licResult.License;
+                }
+                else
+                {
+                    CurrentLicense = null;
+                }
             }
             catch (Exception ex)
             {

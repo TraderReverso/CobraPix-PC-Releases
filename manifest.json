@@ -1,0 +1,13 @@
+{
+  "version": "1.0.1",
+  "downloadUrl": "https://github.com/TraderReverso/CobraPix-PC-Releases/releases/download/v1.0.1/CobraPix-PC-1.0.1-win-x64.zip",
+  "sha256": "1D13AC2FCF55219A5D4F04C4AE7FA866F67953B133EE93E83430103C6E3367FD",
+  "releaseNotes": [
+    "Sistema completo de atualização do aplicativo com integridade verificável por SHA-256",
+    "Instalador independente (CobraPix.Updater.exe) com rollback automático em caso de falhas",
+    "Exportação avançada de dados financeiros para planilhas Excel (.xlsx)",
+    "Precisão aprimorada do agendador e notificações de atrasados",
+    "Melhorias gerais de estabilidade, desempenho e compatibilidade com Windows 10/11"
+  ],
+  "mandatory": false
+}

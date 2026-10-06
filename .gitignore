@@ -39,6 +39,7 @@ _ReSharper*/
 *.bak
 scratch_*.txt
 *.scratch
+scratch/
 
 # Android build, artifacts & archives
 Android/CobraPix.zip
@@ -66,3 +67,7 @@ $RECYCLE.BIN/
 *.key
 appsettings.Production.json
 appsettings.Local.json
+CobraPix.LicenseGenerator/keys/
+keys/
+*license_private*
+

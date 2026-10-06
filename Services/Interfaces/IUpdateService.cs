@@ -14,6 +14,11 @@ namespace CobraPix_PC.Services.Interfaces
     public interface IUpdateService
     {
         /// <summary>
+        /// Endpoint público estável oficial para obtenção do manifesto no GitHub Releases.
+        /// </summary>
+        public const string DefaultManifestUrl = "https://github.com/TraderReverso/CobraPix-PC-Releases/releases/download/v1.0.2/manifest.json";
+
+        /// <summary>
         /// Obtém a versão oficial atualmente instalada do aplicativo (ex: 1.0.0).
         /// </summary>
         string CurrentVersion { get; }
