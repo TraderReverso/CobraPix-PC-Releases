@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using CobraPix_PC.Models;
+using CobraPix_PC.Models.Credit;
 
 namespace CobraPix_PC.Data
 {
@@ -16,6 +17,23 @@ namespace CobraPix_PC.Data
         public DbSet<MonthlyCustomer> MonthlyCustomers => Set<MonthlyCustomer>();
         public DbSet<MonthlyPayment> MonthlyPayments => Set<MonthlyPayment>();
         public DbSet<AppSetting> AppSettings => Set<AppSetting>();
+
+        // Tabelas do Módulo Crédito & Giro (Exclusivo CobraPix PRO)
+        public DbSet<CreditContract> CreditContracts => Set<CreditContract>();
+        public DbSet<CreditDisbursement> CreditDisbursements => Set<CreditDisbursement>();
+        public DbSet<CreditInstallment> CreditInstallments => Set<CreditInstallment>();
+        public DbSet<CreditCycle> CreditCycles => Set<CreditCycle>();
+        public DbSet<CreditPayment> CreditPayments => Set<CreditPayment>();
+        public DbSet<CreditPaymentInstallmentAlloc> CreditPaymentInstallmentAllocs => Set<CreditPaymentInstallmentAlloc>();
+        public DbSet<CreditSurplusBalance> CreditSurplusBalances => Set<CreditSurplusBalance>();
+        public DbSet<CreditSurplusConsumption> CreditSurplusConsumptions => Set<CreditSurplusConsumption>();
+        public DbSet<CreditSurplusConsumptionReversal> CreditSurplusConsumptionReversals => Set<CreditSurplusConsumptionReversal>();
+        public DbSet<CreditPaymentRefund> CreditPaymentRefunds => Set<CreditPaymentRefund>();
+        public DbSet<CreditDevolution> CreditDevolutions => Set<CreditDevolution>();
+        public DbSet<CreditCashOutflow> CreditCashOutflows => Set<CreditCashOutflow>();
+        public DbSet<CreditIdempotencyRecord> CreditIdempotencyRecords => Set<CreditIdempotencyRecord>();
+        public DbSet<CreditPaymentIntent> CreditPaymentIntents => Set<CreditPaymentIntent>();
+        public DbSet<CreditTransactionAudit> CreditTransactionAudits => Set<CreditTransactionAudit>();
 
         public CobraPixDbContext()
         {
@@ -175,6 +193,251 @@ namespace CobraPix_PC.Data
                 entity.Property(s => s.Key).IsRequired().HasMaxLength(100);
                 entity.Property(s => s.Value).IsRequired().HasMaxLength(2000);
                 entity.HasIndex(s => s.Key).IsUnique();
+            });
+
+            // ==========================================
+            // Entidades do Módulo Crédito & Giro
+            // ==========================================
+
+            modelBuilder.Entity<CreditContract>(entity =>
+            {
+                entity.ToTable("CreditContracts");
+                entity.HasKey(c => c.Id);
+                entity.Property(c => c.ContractNumber).IsRequired().HasMaxLength(50);
+                entity.Property(c => c.Notes).HasMaxLength(1000);
+                entity.Property(c => c.CancellationReason).HasMaxLength(500);
+
+                entity.HasIndex(c => c.ContractNumber).IsUnique();
+                entity.HasIndex(c => c.ClientId);
+                entity.HasIndex(c => c.Status);
+                entity.HasIndex(c => c.ContractDate);
+
+                entity.HasOne(c => c.Client)
+                      .WithMany()
+                      .HasForeignKey(c => c.ClientId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<CreditDisbursement>(entity =>
+            {
+                entity.ToTable("CreditDisbursements");
+                entity.HasKey(d => d.Id);
+                entity.Property(d => d.Notes).HasMaxLength(500);
+
+                entity.HasIndex(d => d.ContractId).IsUnique();
+
+                entity.HasOne(d => d.Contract)
+                      .WithOne(c => c.Disbursement)
+                      .HasForeignKey<CreditDisbursement>(d => d.ContractId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<CreditInstallment>(entity =>
+            {
+                entity.ToTable("CreditInstallments");
+                entity.HasKey(i => i.Id);
+
+                entity.HasIndex(i => new { i.ContractId, i.InstallmentNumber }).IsUnique();
+                entity.HasIndex(i => i.ContractId);
+                entity.HasIndex(i => i.DueDate);
+                entity.HasIndex(i => i.Status);
+
+                entity.HasOne(i => i.Contract)
+                      .WithMany(c => c.Installments)
+                      .HasForeignKey(i => i.ContractId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<CreditCycle>(entity =>
+            {
+                entity.ToTable("CreditCycles");
+                entity.HasKey(cy => cy.Id);
+
+                entity.HasIndex(cy => new { cy.ContractId, cy.CycleNumber }).IsUnique();
+                entity.HasIndex(cy => cy.ContractId);
+
+                entity.HasOne(cy => cy.Contract)
+                      .WithMany(c => c.Cycles)
+                      .HasForeignKey(cy => cy.ContractId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<CreditPayment>(entity =>
+            {
+                entity.ToTable("CreditPayments");
+                entity.HasKey(p => p.Id);
+
+                entity.HasIndex(p => p.ContractId);
+                entity.HasIndex(p => p.PaymentDate);
+
+                entity.HasOne(p => p.Contract)
+                      .WithMany(c => c.Payments)
+                      .HasForeignKey(p => p.ContractId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<CreditPaymentInstallmentAlloc>(entity =>
+            {
+                entity.ToTable("CreditPaymentInstallmentAllocs");
+                entity.HasKey(a => a.Id);
+
+                entity.HasIndex(a => a.PaymentId);
+                entity.HasIndex(a => a.InstallmentId);
+
+                entity.HasOne(a => a.Payment)
+                      .WithMany(p => p.Allocations)
+                      .HasForeignKey(a => a.PaymentId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(a => a.Installment)
+                      .WithMany(i => i.Allocations)
+                      .HasForeignKey(a => a.InstallmentId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<CreditSurplusBalance>(entity =>
+            {
+                entity.ToTable("CreditSurplusBalances");
+                entity.HasKey(s => s.Id);
+
+                entity.HasIndex(s => s.ContractId);
+
+                entity.HasOne(s => s.Contract)
+                      .WithMany(c => c.SurplusBalances)
+                      .HasForeignKey(s => s.ContractId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(s => s.SourcePayment)
+                      .WithMany(p => p.SurplusBalances)
+                      .HasForeignKey(s => s.SourcePaymentId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<CreditSurplusConsumption>(entity =>
+            {
+                entity.ToTable("CreditSurplusConsumptions");
+                entity.HasKey(sc => sc.Id);
+
+                entity.HasIndex(sc => sc.SurplusBalanceId);
+                entity.HasIndex(sc => sc.TargetInstallmentId);
+
+                entity.HasOne(sc => sc.SurplusBalance)
+                      .WithMany(s => s.Consumptions)
+                      .HasForeignKey(sc => sc.SurplusBalanceId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(sc => sc.TargetInstallment)
+                      .WithMany(i => i.SurplusConsumptions)
+                      .HasForeignKey(sc => sc.TargetInstallmentId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(sc => sc.TargetCycle)
+                      .WithMany(c => c.SurplusConsumptions)
+                      .HasForeignKey(sc => sc.TargetCycleId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<CreditSurplusConsumptionReversal>(entity =>
+            {
+                entity.ToTable("CreditSurplusConsumptionReversals");
+                entity.HasKey(r => r.Id);
+
+                entity.HasIndex(r => r.CreditSurplusConsumptionId).IsUnique();
+
+                entity.HasOne(r => r.Consumption)
+                      .WithOne(sc => sc.Reversal)
+                      .HasForeignKey<CreditSurplusConsumptionReversal>(r => r.CreditSurplusConsumptionId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<CreditPaymentRefund>(entity =>
+            {
+                entity.ToTable("CreditPaymentRefunds");
+                entity.HasKey(rf => rf.Id);
+                entity.Property(rf => rf.Reason).IsRequired().HasMaxLength(500);
+
+                entity.HasIndex(rf => rf.PaymentId).IsUnique();
+
+                entity.HasOne(rf => rf.Payment)
+                      .WithOne(p => p.Refund)
+                      .HasForeignKey<CreditPaymentRefund>(rf => rf.PaymentId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<CreditIdempotencyRecord>(entity =>
+            {
+                entity.ToTable("CreditIdempotencyRecords");
+                entity.HasKey(r => r.Id);
+                entity.Property(r => r.Scope).IsRequired().HasMaxLength(50);
+                entity.Property(r => r.IdempotencyKey).IsRequired().HasMaxLength(150);
+                entity.Property(r => r.RequestPayloadHash).IsRequired().HasMaxLength(64);
+
+                entity.HasIndex(r => new { r.Scope, r.IdempotencyKey }).IsUnique();
+            });
+
+            modelBuilder.Entity<CreditPaymentIntent>(entity =>
+            {
+                entity.ToTable("CreditPaymentIntents");
+                entity.HasKey(pi => pi.Id);
+                entity.Property(pi => pi.IdempotencyKey).IsRequired().HasMaxLength(150);
+                entity.Property(pi => pi.RequestPayloadHash).IsRequired().HasMaxLength(64);
+
+                entity.HasIndex(pi => pi.IdempotencyKey).IsUnique();
+            });
+
+            modelBuilder.Entity<CreditTransactionAudit>(entity =>
+            {
+                entity.ToTable("CreditTransactionAudits");
+                entity.HasKey(a => a.Id);
+                entity.Property(a => a.OperationType).IsRequired().HasMaxLength(100);
+
+                entity.HasIndex(a => a.ContractId);
+            });
+
+            modelBuilder.Entity<CreditDevolution>(entity =>
+            {
+                entity.ToTable("CreditDevolutions");
+                entity.HasKey(d => d.Id);
+                entity.Property(d => d.Reason).IsRequired().HasMaxLength(500);
+
+                entity.HasOne(d => d.Payment)
+                      .WithMany(p => p.Devolutions)
+                      .HasForeignKey(d => d.PaymentId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(d => d.Contract)
+                      .WithMany()
+                      .HasForeignKey(d => d.ContractId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(d => d.Refund)
+                      .WithOne(rf => rf.Devolution)
+                      .HasForeignKey<CreditDevolution>(d => d.RefundId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<CreditCashOutflow>(entity =>
+            {
+                entity.ToTable("CreditCashOutflows");
+                entity.HasKey(o => o.Id);
+                entity.Property(o => o.Description).IsRequired().HasMaxLength(500);
+
+                entity.HasIndex(o => o.DevolutionId).IsUnique();
+
+                entity.HasOne(o => o.Devolution)
+                      .WithOne(d => d.CashOutflow)
+                      .HasForeignKey<CreditCashOutflow>(o => o.DevolutionId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(o => o.Payment)
+                      .WithMany(p => p.CashOutflows)
+                      .HasForeignKey(o => o.PaymentId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(o => o.Contract)
+                      .WithMany()
+                      .HasForeignKey(o => o.ContractId)
+                      .OnDelete(DeleteBehavior.Restrict);
             });
         }
     }

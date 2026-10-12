@@ -1,0 +1,669 @@
+<UserControl x:Class="CobraPix_PC.Views.CreditoGiroView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:vmm="clr-namespace:CobraPix_PC.ViewModels.Modules"
+             mc:Ignorable="d"
+             d:DesignHeight="850" d:DesignWidth="1200"
+             d:DataContext="{d:DesignInstance Type=vmm:CreditoGiroViewModel}">
+
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+    </UserControl.Resources>
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <!-- 0: Cabeçalho com Título e Badge PRO -->
+            <RowDefinition Height="Auto" />
+            <!-- 1: Banners de Notificação (Erro / Sucesso) -->
+            <RowDefinition Height="Auto" />
+            <!-- 2: Conteúdo Principal (Abas quando PRO ou Bloqueio quando FREE) -->
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- ======================================================== -->
+        <!-- 0. CABEÇALHO DO MÓDULO                                    -->
+        <!-- ======================================================== -->
+        <Grid Grid.Row="0" Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Crédito &amp; Giro"
+                               FontSize="24"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource TextPrimaryBrush}" />
+                    <Border Background="#F59E0B"
+                            CornerRadius="6"
+                            Padding="8,2"
+                            Margin="12,0,0,0"
+                            VerticalAlignment="Center">
+                        <TextBlock Text="{Binding PlanBadgeText}"
+                                   FontWeight="Bold"
+                                   FontSize="11"
+                                   Foreground="#000000" />
+                    </Border>
+                </StackPanel>
+                <TextBlock Text="Gestão integral de capital de giro, contratos, amortizações sob Regra A e devoluções em duas fases."
+                           FontSize="13"
+                           Foreground="{DynamicResource TextSecondaryBrush}"
+                           Margin="0,4,0,0" />
+            </StackPanel>
+
+            <Button Grid.Column="1"
+                    Content="🔄 Atualizar Dados"
+                    Command="{Binding LoadDataCommand}"
+                    Background="{DynamicResource CardDarkBrush}"
+                    Foreground="{DynamicResource TextPrimaryBrush}"
+                    BorderBrush="{DynamicResource BorderDarkBrush}"
+                    BorderThickness="1"
+                    Padding="12,8"
+                    Cursor="Hand"
+                    VerticalAlignment="Center" />
+        </Grid>
+
+        <!-- ======================================================== -->
+        <!-- 1. BANNERS DE NOTIFICAÇÃO E FEEDBACK                     -->
+        <!-- ======================================================== -->
+        <StackPanel Grid.Row="1" Margin="0,0,0,12">
+            <!-- Mensagem de Erro -->
+            <Border Background="#3B1212"
+                    BorderBrush="#EF4444"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="12,8"
+                    Margin="0,0,0,8"
+                    Visibility="{Binding ErrorMessage, Converter={StaticResource BoolToVis}}">
+                <TextBlock Text="{Binding ErrorMessage}"
+                           Foreground="#FCA5A5"
+                           FontWeight="SemiBold"
+                           FontSize="13"
+                           TextWrapping="Wrap" />
+            </Border>
+
+            <!-- Mensagem de Sucesso -->
+            <Border Background="#064E3B"
+                    BorderBrush="#10B981"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="12,8"
+                    Margin="0,0,0,8"
+                    Visibility="{Binding SuccessMessage, Converter={StaticResource BoolToVis}}">
+                <TextBlock Text="{Binding SuccessMessage}"
+                           Foreground="#6EE7B7"
+                           FontWeight="SemiBold"
+                           FontSize="13"
+                           TextWrapping="Wrap" />
+            </Border>
+        </StackPanel>
+
+        <!-- ======================================================== -->
+        <!-- 2. PAINEL DE BLOQUEIO FREE (QUANDO NÃO É PRO)            -->
+        <!-- ======================================================== -->
+        <Border Grid.Row="2"
+                Background="{DynamicResource CardDarkBrush}"
+                BorderBrush="{DynamicResource BorderDarkBrush}"
+                BorderThickness="1"
+                CornerRadius="12"
+                Padding="32"
+                Visibility="{Binding IsFree, Converter={StaticResource BoolToVis}}">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="600">
+                <TextBlock Text="🔒"
+                           FontSize="48"
+                           HorizontalAlignment="Center"
+                           Margin="0,0,0,16" />
+                <TextBlock Text="Módulo Exclusivo CobraPix PRO"
+                           FontSize="20"
+                           FontWeight="Bold"
+                           HorizontalAlignment="Center"
+                           Foreground="{DynamicResource TextPrimaryBrush}"
+                           Margin="0,0,0,8" />
+                <TextBlock Text="A esteira completa de Crédito &amp; Giro permite cadastrar contratos de capital de giro, aplicar amortizações estritas pela Regra A (juros primeiro, principal depois), gerenciar excedentes do cliente e processar estornos e devoluções com integridade financeira e contábil."
+                           FontSize="13"
+                           TextAlignment="Center"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource TextSecondaryBrush}"
+                           Margin="0,0,0,24" />
+                <TextBlock Text="Ative o plano CobraPix PRO para desbloquear este e outros recursos premium sem limites."
+                           FontSize="12"
+                           FontWeight="SemiBold"
+                           HorizontalAlignment="Center"
+                           Foreground="#F59E0B" />
+            </StackPanel>
+        </Border>
+
+        <!-- ======================================================== -->
+        <!-- 2. CONTEÚDO PRINCIPAL QUANDO PRO ESTÁ ATIVO             -->
+        <!-- ======================================================== -->
+        <TabControl Grid.Row="2"
+                    SelectedIndex="{Binding SelectedTabIndex}"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Visibility="{Binding IsPro, Converter={StaticResource BoolToVis}}">
+
+            <!-- ==================================================== -->
+            <!-- ABA 1: CONTRATOS & DESEMBOLSOS                      -->
+            <!-- ==================================================== -->
+            <TabItem Header="📋 Contratos &amp; Desembolsos" FontSize="13">
+                <Grid Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="380" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Formulário de Novo Contrato -->
+                    <Border Grid.Column="0"
+                            Background="{DynamicResource CardDarkBrush}"
+                            BorderBrush="{DynamicResource BorderDarkBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16"
+                            Margin="0,0,16,0">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <TextBlock Text="Novo Contrato de Crédito"
+                                           FontSize="16"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource TextPrimaryBrush}"
+                                           Margin="0,0,0,12" />
+
+                                <TextBlock Text="Cliente:" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                <ComboBox ItemsSource="{Binding Clients}"
+                                          SelectedItem="{Binding SelectedClient}"
+                                          DisplayMemberPath="Name"
+                                          Margin="0,4,0,10"
+                                          Height="32" />
+
+                                <TextBlock Text="Número / Código do Contrato:" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                <TextBox Text="{Binding NewContractNumber, UpdateSourceTrigger=PropertyChanged}"
+                                         Margin="0,4,0,10"
+                                         Height="30" />
+
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,4,0">
+                                        <TextBlock Text="Principal (R$):" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                        <TextBox Text="{Binding NewPrincipalAmount, UpdateSourceTrigger=PropertyChanged}" Height="30" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Margin="4,0,0,0">
+                                        <TextBlock Text="Juros Total (R$):" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                        <TextBox Text="{Binding NewTotalInterest, UpdateSourceTrigger=PropertyChanged}" Height="30" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,4,0">
+                                        <TextBlock Text="Parcelas:" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                        <TextBox Text="{Binding NewInstallmentsCount, UpdateSourceTrigger=PropertyChanged}" Height="30" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Margin="4,0,0,0">
+                                        <TextBlock Text="1º Vencimento:" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                        <DatePicker SelectedDate="{Binding NewFirstDueDate}" Height="30" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <TextBlock Text="Data do Contrato:" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                <DatePicker SelectedDate="{Binding NewContractDate}" Height="30" Margin="0,4,0,10" />
+
+                                <TextBlock Text="Observações:" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                <TextBox Text="{Binding NewNotes, UpdateSourceTrigger=PropertyChanged}" Height="50" Margin="0,4,0,14" TextWrapping="Wrap" AcceptsReturn="True" />
+
+                                <Button Content="Salvar Contrato (Rascunho)"
+                                        Command="{Binding CreateContractCommand}"
+                                        Background="{DynamicResource AccentBrush}"
+                                        Foreground="#FFFFFF"
+                                        FontWeight="Bold"
+                                        Height="36"
+                                        Cursor="Hand" />
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+
+                    <!-- Lista e Detalhes do Contrato Selecionado -->
+                    <Grid Grid.Column="1">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <!-- Tabela de Contratos -->
+                        <Border Grid.Row="0"
+                                Background="{DynamicResource CardDarkBrush}"
+                                BorderBrush="{DynamicResource BorderDarkBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="12"
+                                Margin="0,0,0,12">
+                            <DataGrid ItemsSource="{Binding Contracts}"
+                                      SelectedItem="{Binding SelectedContract}"
+                                      AutoGenerateColumns="False"
+                                      IsReadOnly="True"
+                                      SelectionMode="Single"
+                                      Background="Transparent"
+                                      RowBackground="{DynamicResource TableAltRowBrush}"
+                                      BorderThickness="0">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Número" Binding="{Binding ContractNumber}" Width="110" />
+                                    <DataGridTextColumn Header="Cliente" Binding="{Binding Client.Name}" Width="140" />
+                                    <DataGridTextColumn Header="Data" Binding="{Binding ContractDate, StringFormat='{}{0:dd/MM/yyyy}'}" Width="90" />
+                                    <DataGridTextColumn Header="Principal" Binding="{Binding DisbursedPrincipalCents, ConverterParameter=cents}" Width="100" />
+                                    <DataGridTextColumn Header="Juros" Binding="{Binding TotalNominalInterestCents, ConverterParameter=cents}" Width="90" />
+                                    <DataGridTextColumn Header="Total" Binding="{Binding TotalAmountCents, ConverterParameter=cents}" Width="100" />
+                                    <DataGridTextColumn Header="Situação" Binding="{Binding Status}" Width="110" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Border>
+
+                        <!-- Ações do Contrato Selecionado (Desembolso / Cancelamento) -->
+                        <Border Grid.Row="1"
+                                Background="{DynamicResource CardDarkBrush}"
+                                BorderBrush="{DynamicResource BorderDarkBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="16"
+                                Visibility="{Binding HasSelectedContract, Converter={StaticResource BoolToVis}}">
+                            <StackPanel>
+                                <TextBlock Text="Gestão do Contrato Selecionado"
+                                           FontSize="14"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource TextPrimaryBrush}"
+                                           Margin="0,0,0,8" />
+
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Bloco Desembolso -->
+                                    <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                        <TextBlock Text="Desembolso Financeiro:" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                        <Button Content="⚡ Liberar Desembolso (Tornar Ativo)"
+                                                Command="{Binding DisburseContractCommand}"
+                                                IsEnabled="{Binding CanDisburseSelectedContract}"
+                                                Background="#059669"
+                                                Foreground="#FFFFFF"
+                                                FontWeight="Bold"
+                                                Height="32"
+                                                Margin="0,6,0,0"
+                                                Cursor="Hand" />
+                                    </StackPanel>
+
+                                    <!-- Bloco Cancelamento -->
+                                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                        <TextBlock Text="Cancelamento do Contrato:" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                        <Grid Margin="0,6,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox Grid.Column="0"
+                                                     Text="{Binding CancellationReason, UpdateSourceTrigger=PropertyChanged}"
+                                                     Height="32"
+                                                     Margin="0,0,6,0"
+                                                     ToolTip="Motivo do cancelamento" />
+                                            <Button Grid.Column="1"
+                                                    Content="Cancelar"
+                                                    Command="{Binding CancelContractCommand}"
+                                                    IsEnabled="{Binding CanCancelSelectedContract}"
+                                                    Background="#DC2626"
+                                                    Foreground="#FFFFFF"
+                                                    FontWeight="Bold"
+                                                    Padding="12,0"
+                                                    Height="32"
+                                                    Cursor="Hand" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
+            <!-- ==================================================== -->
+            <!-- ABA 2: PAGAMENTOS & ALOCAÇÕES (REGRA A)             -->
+            <!-- ==================================================== -->
+            <TabItem Header="💳 Pagamentos &amp; Alocações" FontSize="13">
+                <Grid Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="400" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Formulário de Pagamento e Prévia -->
+                    <Border Grid.Column="0"
+                            Background="{DynamicResource CardDarkBrush}"
+                            BorderBrush="{DynamicResource BorderDarkBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16"
+                            Margin="0,0,16,0">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <TextBlock Text="Registrar Pagamento"
+                                           FontSize="16"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource TextPrimaryBrush}"
+                                           Margin="0,0,0,12" />
+
+                                <TextBlock Text="ID do Contrato:" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                <TextBox Text="{Binding PaymentContractId, UpdateSourceTrigger=PropertyChanged}" Height="30" Margin="0,4,0,10" />
+
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,4,0">
+                                        <TextBlock Text="Valor (R$):" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                        <TextBox Text="{Binding PaymentAmount, UpdateSourceTrigger=PropertyChanged}" Height="30" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Margin="4,0,0,0">
+                                        <TextBlock Text="Data Pagamento:" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                        <DatePicker SelectedDate="{Binding PaymentDate}" Height="30" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <TextBlock Text="Observações:" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                <TextBox Text="{Binding PaymentNotes, UpdateSourceTrigger=PropertyChanged}" Height="40" Margin="0,4,0,12" />
+
+                                <Button Content="🔍 Simular Prévia de Alocação (Regra A)"
+                                        Command="{Binding PreviewPaymentCommand}"
+                                        Background="{DynamicResource CardHoverBrush}"
+                                        Foreground="{DynamicResource TextPrimaryBrush}"
+                                        BorderBrush="{DynamicResource BorderDarkBrush}"
+                                        BorderThickness="1"
+                                        Height="32"
+                                        Margin="0,0,0,12"
+                                        Cursor="Hand" />
+
+                                <!-- Painel da Prévia -->
+                                <Border Background="{DynamicResource SurfaceBrush}"
+                                        BorderBrush="{DynamicResource BorderDarkBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="6"
+                                        Padding="10"
+                                        Margin="0,0,0,16">
+                                    <StackPanel>
+                                        <TextBlock Text="Decomposição Prevista (Regra A):" FontWeight="Bold" FontSize="12" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,6" />
+                                        <TextBlock Text="{Binding StatusMessage}" FontSize="12" Foreground="{DynamicResource AccentBrush}" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+
+                                <Button Content="Confirmar e Gravar Pagamento"
+                                        Command="{Binding RegisterPaymentCommand}"
+                                        Background="#10B981"
+                                        Foreground="#FFFFFF"
+                                        FontWeight="Bold"
+                                        Height="36"
+                                        Cursor="Hand" />
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+
+                    <!-- Lista de Pagamentos Registrados -->
+                    <Border Grid.Column="1"
+                            Background="{DynamicResource CardDarkBrush}"
+                            BorderBrush="{DynamicResource BorderDarkBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="12">
+                        <DataGrid ItemsSource="{Binding Payments}"
+                                  SelectedItem="{Binding SelectedPayment}"
+                                  AutoGenerateColumns="False"
+                                  IsReadOnly="True"
+                                  SelectionMode="Single"
+                                  Background="Transparent"
+                                  RowBackground="{DynamicResource TableAltRowBrush}"
+                                  BorderThickness="0">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Data" Binding="{Binding PaymentDate, StringFormat='{}{0:dd/MM/yyyy}'}" Width="90" />
+                                <DataGridTextColumn Header="Contrato" Binding="{Binding Contract.ContractNumber}" Width="120" />
+                                <DataGridTextColumn Header="Cliente" Binding="{Binding Contract.Client.Name}" Width="140" />
+                                <DataGridTextColumn Header="Valor (Centavos)" Binding="{Binding AmountCents}" Width="110" />
+                                <DataGridTextColumn Header="Situação" Binding="{Binding Status}" Width="130" />
+                                <DataGridTextColumn Header="Alocações" Binding="{Binding Allocations.Count}" Width="80" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- ==================================================== -->
+            <!-- ABA 3: SALDOS EXCEDENTES                            -->
+            <!-- ==================================================== -->
+            <TabItem Header="🪙 Saldos Excedentes" FontSize="13">
+                <Grid Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="380" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Tabela de Bolsas de Excedente -->
+                    <Border Grid.Column="0"
+                            Background="{DynamicResource CardDarkBrush}"
+                            BorderBrush="{DynamicResource BorderDarkBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="12"
+                            Margin="0,0,16,0">
+                        <DataGrid ItemsSource="{Binding SurplusBalances}"
+                                  SelectedItem="{Binding SelectedSurplus}"
+                                  AutoGenerateColumns="False"
+                                  IsReadOnly="True"
+                                  SelectionMode="Single"
+                                  Background="Transparent"
+                                  RowBackground="{DynamicResource TableAltRowBrush}"
+                                  BorderThickness="0">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Contrato" Binding="{Binding Contract.ContractNumber}" Width="120" />
+                                <DataGridTextColumn Header="Cliente" Binding="{Binding Contract.Client.Name}" Width="140" />
+                                <DataGridTextColumn Header="Original (Cents)" Binding="{Binding OriginalSurplusCents}" Width="120" />
+                                <DataGridTextColumn Header="Disponível (Cents)" Binding="{Binding RemainingSurplusCents}" Width="120" />
+                                <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="120" />
+                                <DataGridTextColumn Header="Consumos" Binding="{Binding Consumptions.Count}" Width="80" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Border>
+
+                    <!-- Ação de Consumo e Reversão -->
+                    <Border Grid.Column="1"
+                            Background="{DynamicResource CardDarkBrush}"
+                            BorderBrush="{DynamicResource BorderDarkBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16">
+                        <StackPanel>
+                            <TextBlock Text="Amortizar Parcela com Excedente"
+                                       FontSize="16"
+                                       FontWeight="Bold"
+                                       Foreground="{DynamicResource TextPrimaryBrush}"
+                                       Margin="0,0,0,12" />
+
+                            <TextBlock Text="Parcela Alvo (ID):" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                            <TextBox Text="{Binding ConsumeTargetInstallmentId, UpdateSourceTrigger=PropertyChanged}" Height="30" Margin="0,4,0,10" />
+
+                            <TextBlock Text="Valor a Consumir (R$):" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                            <TextBox Text="{Binding ConsumeAmount, UpdateSourceTrigger=PropertyChanged}" Height="30" Margin="0,4,0,14" />
+
+                            <Button Content="Consumir Excedente (Regra A)"
+                                    Command="{Binding ConsumeSurplusCommand}"
+                                    IsEnabled="{Binding HasSelectedSurplus}"
+                                    Background="{DynamicResource AccentBrush}"
+                                    Foreground="#FFFFFF"
+                                    FontWeight="Bold"
+                                    Height="36"
+                                    Margin="0,0,0,18"
+                                    Cursor="Hand" />
+
+                            <Border Height="1" Background="{DynamicResource BorderDarkBrush}" Margin="0,0,0,16" />
+
+                            <TextBlock Text="Reversão de Consumo"
+                                       FontSize="14"
+                                       FontWeight="Bold"
+                                       Foreground="{DynamicResource TextPrimaryBrush}"
+                                       Margin="0,0,0,8" />
+                            <TextBlock Text="Selecione um consumo na lista para reverter e restaurar o saldo 1:1."
+                                       FontSize="12"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,0,12" />
+
+                            <Button Content="↩️ Reverter Consumo Selecionado"
+                                    Command="{Binding ReverseSurplusCommand}"
+                                    IsEnabled="{Binding CanReverseConsumption}"
+                                    Background="#DC2626"
+                                    Foreground="#FFFFFF"
+                                    FontWeight="Bold"
+                                    Height="34"
+                                    Cursor="Hand" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- ==================================================== -->
+            <!-- ABA 4: ESTORNOS & DEVOLUÇÕES (DOIS PASSOS)          -->
+            <!-- ==================================================== -->
+            <TabItem Header="🔄 Estornos &amp; Devoluções" FontSize="13">
+                <Grid Margin="0,12,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Formulário de Autorização de Estorno -->
+                    <Border Grid.Row="0"
+                            Background="{DynamicResource CardDarkBrush}"
+                            BorderBrush="{DynamicResource BorderDarkBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16"
+                            Margin="0,0,0,16">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="220" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                                <TextBlock Text="ID do Pagamento a Estornar:" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                <TextBox Text="{Binding RefundPaymentId, UpdateSourceTrigger=PropertyChanged}" Height="30" Margin="0,4,0,0" />
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Margin="0,0,12,0">
+                                <TextBlock Text="Motivo do Estorno (Auditoria):" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                <TextBox Text="{Binding RefundReason, UpdateSourceTrigger=PropertyChanged}" Height="30" Margin="0,4,0,0" />
+                            </StackPanel>
+
+                            <Button Grid.Column="2"
+                                    Content="⚠️ Autorizar Estorno Integral"
+                                    Command="{Binding AuthorizeRefundCommand}"
+                                    Background="#D97706"
+                                    Foreground="#FFFFFF"
+                                    FontWeight="Bold"
+                                    Padding="16,0"
+                                    Height="32"
+                                    VerticalAlignment="Bottom"
+                                    Cursor="Hand" />
+                        </Grid>
+                    </Border>
+
+                    <!-- Tabela de Devoluções e Ações de Caixa -->
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="340" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Tabela de Devoluções -->
+                        <Border Grid.Column="0"
+                                Background="{DynamicResource CardDarkBrush}"
+                                BorderBrush="{DynamicResource BorderDarkBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="12"
+                                Margin="0,0,16,0">
+                            <DataGrid ItemsSource="{Binding Devolutions}"
+                                      SelectedItem="{Binding SelectedDevolution}"
+                                      AutoGenerateColumns="False"
+                                      IsReadOnly="True"
+                                      SelectionMode="Single"
+                                      Background="Transparent"
+                                      RowBackground="{DynamicResource TableAltRowBrush}"
+                                      BorderThickness="0">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Data Autorização" Binding="{Binding AuthorizedAtUtc, StringFormat='{}{0:dd/MM/yyyy HH:mm}'}" Width="130" />
+                                    <DataGridTextColumn Header="Contrato" Binding="{Binding Contract.ContractNumber}" Width="110" />
+                                    <DataGridTextColumn Header="Cliente" Binding="{Binding Contract.Client.Name}" Width="130" />
+                                    <DataGridTextColumn Header="Valor (Centavos)" Binding="{Binding AuthorizedAmountCents}" Width="110" />
+                                    <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100" />
+                                    <DataGridTextColumn Header="Motivo" Binding="{Binding Reason}" Width="*" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Border>
+
+                        <!-- Ações na Devolução (Liquidar no Caixa ou Cancelar) -->
+                        <Border Grid.Column="1"
+                                Background="{DynamicResource CardDarkBrush}"
+                                BorderBrush="{DynamicResource BorderDarkBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="16">
+                            <StackPanel>
+                                <TextBlock Text="Ciclo da Devolução Selecionada"
+                                           FontSize="15"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource TextPrimaryBrush}"
+                                           Margin="0,0,0,12" />
+
+                                <TextBlock Text="Nota contábil: Autorizar um estorno reabre a dívida, mas NÃO registra saída financeira. A saída de caixa só é gerada na liquidação abaixo."
+                                           FontSize="11"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,0,0,16" />
+
+                                <Button Content="💸 Liquidar Devolução (Saída de Caixa)"
+                                        Command="{Binding SettleDevolutionCommand}"
+                                        IsEnabled="{Binding CanSettleSelectedDevolution}"
+                                        Background="#059669"
+                                        Foreground="#FFFFFF"
+                                        FontWeight="Bold"
+                                        Height="36"
+                                        Margin="0,0,0,12"
+                                        Cursor="Hand" />
+
+                                <Border Height="1" Background="{DynamicResource BorderDarkBrush}" Margin="0,0,0,12" />
+
+                                <TextBlock Text="Motivo do Cancelamento:" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4" />
+                                <TextBox Text="{Binding CancelDevolutionReason, UpdateSourceTrigger=PropertyChanged}" Height="30" Margin="0,0,0,10" />
+
+                                <Button Content="❌ Cancelar Devolução (Restaurar Dívida)"
+                                        Command="{Binding CancelDevolutionCommand}"
+                                        IsEnabled="{Binding CanCancelSelectedDevolution}"
+                                        Background="#991B1B"
+                                        Foreground="#FFFFFF"
+                                        FontWeight="Bold"
+                                        Height="34"
+                                        Cursor="Hand" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</UserControl>
