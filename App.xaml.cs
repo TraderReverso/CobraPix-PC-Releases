@@ -53,6 +53,9 @@ namespace CobraPix_PC
             services.AddScoped<IUpdateService, UpdateService>();
             services.AddScoped<IUpdateDownloadService, UpdateDownloadService>();
             services.AddScoped<IExcelExportService, ExcelExportService>();
+            services.AddScoped<IReminderService, ReminderService>();
+            services.AddScoped<IReportExportService, ReportExportService>();
+            services.AddSingleton<IDiagnosticLogger>(DiagnosticLogger.Instance);
 
             // ViewModels
             services.AddTransient<MainViewModel>();
@@ -71,6 +74,7 @@ namespace CobraPix_PC
             services.AddTransient<CobraPix_PC.ViewModels.Modules.RanqueamentoViewModel>();
             services.AddTransient<CobraPix_PC.ViewModels.Modules.ProViewModel>();
             services.AddTransient<CobraPix_PC.ViewModels.Modules.HistoricoFinanceiroViewModel>();
+            services.AddTransient<CobraPix_PC.ViewModels.Modules.LembretesViewModel>();
         }
 
         protected override async void OnStartup(StartupEventArgs e)
@@ -113,6 +117,30 @@ namespace CobraPix_PC
                 finally
                 {
                     Environment.Exit(Environment.ExitCode);
+                }
+                return;
+            }
+
+            // Suporte a validação automatizada do Módulo Lembretes & Tarefas em ambiente isolado
+            if (e.Args.Length > 0 && e.Args[0] == "--test-reminders")
+            {
+                string logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "reminder_test_result.log");
+                try
+                {
+                    var results = await ReminderTests.RunAllTestsAsync();
+                    File.WriteAllLines(logFile, results);
+                    foreach (var r in results) Console.WriteLine(r);
+                    Environment.ExitCode = 0;
+                }
+                catch (Exception ex)
+                {
+                    File.WriteAllText(logFile, $"ERRO: {ex.Message}\n{ex.StackTrace}");
+                    Console.Error.WriteLine("REMINDER_TEST_FAILED: " + ex.Message + "\n" + ex.StackTrace);
+                    Environment.ExitCode = 1;
+                }
+                finally
+                {
+                    Shutdown(Environment.ExitCode);
                 }
                 return;
             }

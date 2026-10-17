@@ -351,6 +351,18 @@
                                 Command="{Binding NavigateToRankingCommand}"
                                 Style="{StaticResource ActionSecondaryButtonStyle}"
                                 Margin="0,2,8,2" Padding="10,5" FontSize="11" />
+                        <Button Content="🔔 Lembretes"
+                                Command="{Binding NavigateToRemindersCommand}"
+                                Style="{StaticResource ActionSecondaryButtonStyle}"
+                                Margin="0,2,8,2" Padding="10,5" FontSize="11" />
+                        <Button Content="📊 Histórico"
+                                Command="{Binding NavigateToHistoricoCommand}"
+                                Style="{StaticResource ActionSecondaryButtonStyle}"
+                                Margin="0,2,8,2" Padding="10,5" FontSize="11" />
+                        <Button Content="⚙️ Configurações"
+                                Command="{Binding NavigateToConfigCommand}"
+                                Style="{StaticResource ActionSecondaryButtonStyle}"
+                                Margin="0,2,8,2" Padding="10,5" FontSize="11" />
                     </WrapPanel>
                 </Grid>
             </Border>
@@ -431,6 +443,83 @@
                             </Grid>
                         </Border>
 
+                        <!-- Lista de Próximas Cobranças a Receber -->
+                        <TextBlock Text="Próximas Cobranças a Receber"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextPrimaryBrush}"
+                                   Margin="0,4,0,8" />
+
+                        <TextBlock Text="Nenhuma cobrança pendente para os próximos dias."
+                                   FontSize="11"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   Margin="0,0,0,10">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasUpcomingCobrancas}" Value="False">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+
+                        <ItemsControl ItemsSource="{Binding UpcomingCobrancas}" Margin="0,0,0,12">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{DynamicResource HeaderDarkBrush}"
+                                            BorderBrush="{DynamicResource BorderDarkBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="6"
+                                            Padding="10,6"
+                                            Margin="0,0,0,6">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Text="{Binding ClientName}"
+                                                           FontSize="12"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource TextPrimaryBrush}" />
+                                                <TextBlock FontSize="10"
+                                                           Foreground="{DynamicResource TextMutedBrush}"
+                                                           Margin="0,1,0,0">
+                                                    <Run Text="{Binding Description, Mode=OneWay}" />
+                                                    <Run Text=" · Vencimento: " />
+                                                    <Run Text="{Binding FormattedDueDate, Mode=OneWay}" FontWeight="SemiBold" />
+                                                </TextBlock>
+                                            </StackPanel>
+
+                                            <Border Grid.Column="1"
+                                                    Background="{Binding BadgeBackground}"
+                                                    CornerRadius="4"
+                                                    Padding="6,2"
+                                                    VerticalAlignment="Center"
+                                                    Margin="8,0,10,0">
+                                                <TextBlock Text="{Binding BadgeText}"
+                                                           FontSize="9"
+                                                           FontWeight="Bold"
+                                                           Foreground="{Binding BadgeForeground}" />
+                                            </Border>
+
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding FormattedAmount}"
+                                                       FontSize="12"
+                                                       FontWeight="Bold"
+                                                       Foreground="{DynamicResource AccentBrush}"
+                                                       VerticalAlignment="Center" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
                         <!-- Ações Rápidas -->
                         <StackPanel Orientation="Horizontal">
                             <Button Content="Ver Calendário de Vencimentos →"
@@ -445,45 +534,74 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Coluna Direita: Pagamentos Recentes -->
-                <Border Grid.Column="2"
-                        Background="{DynamicResource CardDarkBrush}"
-                        BorderBrush="{DynamicResource BorderDarkBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="16">
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
-                        </Grid.RowDefinitions>
+                <!-- Coluna Direita: Lembretes & Pagamentos Recentes -->
+                <StackPanel Grid.Column="2">
+                    <!-- Card 1: Lembretes & Tarefas Prioritárias -->
+                    <Border Background="{DynamicResource CardDarkBrush}"
+                            BorderBrush="{DynamicResource BorderDarkBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16"
+                            Margin="0,0,0,16">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,12">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="🔔 Lembretes de Hoje e Atrasados"
+                                               FontSize="14"
+                                               FontWeight="Bold"
+                                               Foreground="{DynamicResource TextPrimaryBrush}" />
+                                </StackPanel>
+                                <Button Content="Ver Todos →"
+                                        Command="{Binding NavigateToRemindersCommand}"
+                                        Style="{StaticResource ActionSecondaryButtonStyle}"
+                                        HorizontalAlignment="Right"
+                                        FontSize="11"
+                                        Padding="8,4" />
+                            </Grid>
 
-                        <Grid Grid.Row="0" Margin="0,0,0,12">
-                            <TextBlock Text="💳 Últimos Pagamentos Recebidos"
-                                       FontSize="14"
-                                       FontWeight="Bold"
-                                       Foreground="{DynamicResource TextPrimaryBrush}" />
-                            <Button Content="Histórico Completo →"
-                                    Command="{Binding NavigateToHistoricoCommand}"
-                                    Style="{StaticResource ActionSecondaryButtonStyle}"
-                                    HorizontalAlignment="Right"
-                                    FontSize="11"
-                                    Padding="8,4" />
-                        </Grid>
+                            <!-- Sub-resumo dos Lembretes -->
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="10" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
 
-                        <!-- Lista de Pagamentos Recentes -->
-                        <StackPanel Grid.Row="1">
-                            <TextBlock Text="Nenhum pagamento registrado ainda."
-                                       FontSize="12"
+                                <Border Grid.Column="0"
+                                        Background="{DynamicResource HeaderDarkBrush}"
+                                        BorderBrush="{DynamicResource BorderDarkBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="6"
+                                        Padding="10,8">
+                                    <StackPanel>
+                                        <TextBlock Text="Atrasados" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" />
+                                        <TextBlock Text="{Binding OverdueRemindersCount}" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource DangerBrush}" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Grid.Column="2"
+                                        Background="{DynamicResource HeaderDarkBrush}"
+                                        BorderBrush="{DynamicResource BorderDarkBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="6"
+                                        Padding="10,8">
+                                    <StackPanel>
+                                        <TextBlock Text="Para Hoje" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" />
+                                        <TextBlock Text="{Binding TodayRemindersCount}" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource WarningBrush}" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+
+                            <!-- Mensagem se vazio -->
+                            <TextBlock Text="Nenhum lembrete atrasado ou para hoje."
+                                       FontSize="11"
                                        Foreground="{DynamicResource TextMutedBrush}"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"
-                                       Margin="0,24,0,0">
+                                       Margin="0,4,0,4">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="Visibility" Value="Collapsed" />
                                         <Style.Triggers>
-                                            <DataTrigger Binding="{Binding HasRecentPayments}" Value="False">
+                                            <DataTrigger Binding="{Binding HasUrgentReminders}" Value="False">
                                                 <Setter Property="Visibility" Value="Visible" />
                                             </DataTrigger>
                                         </Style.Triggers>
@@ -491,15 +609,16 @@
                                 </TextBlock.Style>
                             </TextBlock>
 
-                            <ItemsControl ItemsSource="{Binding RecentPayments}">
+                            <!-- Lista de Lembretes Urgentes -->
+                            <ItemsControl ItemsSource="{Binding UrgentReminders}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Border Background="{DynamicResource HeaderDarkBrush}"
                                                 BorderBrush="{DynamicResource BorderDarkBrush}"
                                                 BorderThickness="1"
                                                 CornerRadius="6"
-                                                Padding="12,8"
-                                                Margin="0,0,0,8">
+                                                Padding="10,7"
+                                                Margin="0,0,0,6">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*" />
@@ -508,45 +627,140 @@
                                                 </Grid.ColumnDefinitions>
 
                                                 <StackPanel Grid.Column="0">
-                                                    <TextBlock Text="{Binding ClientName}"
+                                                    <TextBlock Text="{Binding Title}"
                                                                FontSize="12"
                                                                FontWeight="SemiBold"
-                                                               Foreground="{DynamicResource TextPrimaryBrush}" />
-                                                    <TextBlock FontSize="10"
+                                                               Foreground="{DynamicResource TextPrimaryBrush}"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding FormattedDueDate, StringFormat='Prazo: {0}'}"
+                                                               FontSize="10"
                                                                Foreground="{DynamicResource TextMutedBrush}"
-                                                               Margin="0,2,0,0">
-                                                        <Run Text="{Binding Description, Mode=OneWay}" />
-                                                        <Run Text=" · " />
-                                                        <Run Text="{Binding FormattedDate, Mode=OneWay}" />
-                                                    </TextBlock>
+                                                               Margin="0,1,0,0" />
                                                 </StackPanel>
 
                                                 <Border Grid.Column="1"
-                                                        Background="#16382B"
+                                                        Background="{DynamicResource CardDarkBrush}"
+                                                        BorderBrush="{Binding PriorityColor}"
+                                                        BorderThickness="1"
                                                         CornerRadius="4"
                                                         Padding="6,2"
                                                         VerticalAlignment="Center"
-                                                        Margin="8,0,12,0">
-                                                    <TextBlock Text="{Binding MethodBadge}"
+                                                        Margin="8,0,0,0">
+                                                    <TextBlock Text="{Binding PriorityLabel}"
                                                                FontSize="9"
                                                                FontWeight="Bold"
-                                                               Foreground="{DynamicResource SuccessBrush}" />
+                                                               Foreground="{Binding PriorityColor}" />
                                                 </Border>
-
-                                                <TextBlock Grid.Column="2"
-                                                           Text="{Binding FormattedAmount}"
-                                                           FontSize="13"
-                                                           FontWeight="Bold"
-                                                           Foreground="{DynamicResource SuccessBrush}"
-                                                           VerticalAlignment="Center" />
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </StackPanel>
-                    </Grid>
-                </Border>
+                    </Border>
+
+                    <!-- Card 2: Últimos Pagamentos Recebidos -->
+                    <Border Background="{DynamicResource CardDarkBrush}"
+                            BorderBrush="{DynamicResource BorderDarkBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <Grid Grid.Row="0" Margin="0,0,0,12">
+                                <TextBlock Text="💳 Últimos Pagamentos Recebidos"
+                                           FontSize="14"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource TextPrimaryBrush}" />
+                                <Button Content="Histórico Completo →"
+                                        Command="{Binding NavigateToHistoricoCommand}"
+                                        Style="{StaticResource ActionSecondaryButtonStyle}"
+                                        HorizontalAlignment="Right"
+                                        FontSize="11"
+                                        Padding="8,4" />
+                            </Grid>
+
+                            <!-- Lista de Pagamentos Recentes -->
+                            <StackPanel Grid.Row="1">
+                                <TextBlock Text="Nenhum pagamento registrado ainda."
+                                           FontSize="12"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           Margin="0,24,0,0">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HasRecentPayments}" Value="False">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+
+                                <ItemsControl ItemsSource="{Binding RecentPayments}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{DynamicResource HeaderDarkBrush}"
+                                                    BorderBrush="{DynamicResource BorderDarkBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="6"
+                                                    Padding="12,8"
+                                                    Margin="0,0,0,8">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <StackPanel Grid.Column="0">
+                                                        <TextBlock Text="{Binding ClientName}"
+                                                                   FontSize="12"
+                                                                   FontWeight="SemiBold"
+                                                                   Foreground="{DynamicResource TextPrimaryBrush}" />
+                                                        <TextBlock FontSize="10"
+                                                                   Foreground="{DynamicResource TextMutedBrush}"
+                                                                   Margin="0,2,0,0">
+                                                            <Run Text="{Binding Description, Mode=OneWay}" />
+                                                            <Run Text=" · " />
+                                                            <Run Text="{Binding FormattedDate, Mode=OneWay}" />
+                                                        </TextBlock>
+                                                    </StackPanel>
+
+                                                    <Border Grid.Column="1"
+                                                            Background="#16382B"
+                                                            CornerRadius="4"
+                                                            Padding="6,2"
+                                                            VerticalAlignment="Center"
+                                                            Margin="8,0,12,0">
+                                                        <TextBlock Text="{Binding MethodBadge}"
+                                                                   FontSize="9"
+                                                                   FontWeight="Bold"
+                                                                   Foreground="{DynamicResource SuccessBrush}" />
+                                                    </Border>
+
+                                                    <TextBlock Grid.Column="2"
+                                                               Text="{Binding FormattedAmount}"
+                                                               FontSize="13"
+                                                               FontWeight="Bold"
+                                                               Foreground="{DynamicResource SuccessBrush}"
+                                                               VerticalAlignment="Center" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </StackPanel>
             </Grid>
         </Grid>
     </ScrollViewer>

@@ -41,45 +41,72 @@
                            Margin="0,4,0,0" />
             </StackPanel>
 
-            <!-- Seletor de Mês/Ano estilo CashFlow Android -->
-            <Border Grid.Column="1"
-                    Background="{DynamicResource CardDarkBrush}"
-                    BorderBrush="{DynamicResource BorderDarkBrush}"
-                    BorderThickness="1"
-                    CornerRadius="8"
-                    Padding="12,6"
-                    VerticalAlignment="Center">
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Command="{Binding PreviousMonthCommand}"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            Foreground="{DynamicResource AccentBrush}"
-                            FontSize="14"
-                            FontWeight="Bold"
-                            Padding="8,4"
-                            Cursor="Hand"
-                            ToolTip="Mês Anterior"
-                            Content="◀" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <!-- Botão Exportar CSV -->
+                <Button Command="{Binding ExportCsvCommand}"
+                        Style="{StaticResource ActionSecondaryButtonStyle}"
+                        Margin="0,0,8,0"
+                        Padding="10,6"
+                        FontSize="11"
+                        ToolTip="Exportar relatório filtrado para arquivo CSV">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="📄" Margin="0,0,5,0" />
+                        <TextBlock Text="Exportar CSV" FontWeight="SemiBold" />
+                    </StackPanel>
+                </Button>
 
-                    <TextBlock Text="{Binding MonthYearDisplayName}"
-                               FontSize="14"
-                               FontWeight="Bold"
-                               Foreground="{DynamicResource TextPrimaryBrush}"
-                               VerticalAlignment="Center"
-                               Margin="12,0" />
+                <!-- Botão Exportar Excel -->
+                <Button Command="{Binding ExportExcelCommand}"
+                        Style="{StaticResource ActionSecondaryButtonStyle}"
+                        Margin="0,0,12,0"
+                        Padding="10,6"
+                        FontSize="11"
+                        ToolTip="Exportar relatório formatado em planilha Excel (.xlsx)">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="📊" Margin="0,0,5,0" />
+                        <TextBlock Text="Exportar Excel" FontWeight="SemiBold" />
+                    </StackPanel>
+                </Button>
 
-                    <Button Command="{Binding NextMonthCommand}"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            Foreground="{DynamicResource AccentBrush}"
-                            FontSize="14"
-                            FontWeight="Bold"
-                            Padding="8,4"
-                            Cursor="Hand"
-                            ToolTip="Próximo Mês"
-                            Content="▶" />
-                </StackPanel>
-            </Border>
+                <!-- Seletor de Mês/Ano estilo CashFlow Android -->
+                <Border Background="{DynamicResource CardDarkBrush}"
+                        BorderBrush="{DynamicResource BorderDarkBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="12,6"
+                        VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Command="{Binding PreviousMonthCommand}"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Foreground="{DynamicResource AccentBrush}"
+                                FontSize="14"
+                                FontWeight="Bold"
+                                Padding="8,4"
+                                Cursor="Hand"
+                                ToolTip="Mês Anterior"
+                                Content="◀" />
+
+                        <TextBlock Text="{Binding MonthYearDisplayName}"
+                                   FontSize="14"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource TextPrimaryBrush}"
+                                   VerticalAlignment="Center"
+                                   Margin="12,0" />
+
+                        <Button Command="{Binding NextMonthCommand}"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Foreground="{DynamicResource AccentBrush}"
+                                FontSize="14"
+                                FontWeight="Bold"
+                                Padding="8,4"
+                                Cursor="Hand"
+                                ToolTip="Próximo Mês"
+                                Content="▶" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
         </Grid>
 
         <!-- ======================================================== -->
@@ -957,13 +984,13 @@
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate DataType="{x:Type vm:FinancialTransactionItemViewModel}">
                                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                        <!-- Botão Gerar PDF -->
-                                        <Button Command="{Binding DataContext.GeneratePdfReceiptCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        <!-- Botão Visualizar / Gerar PDF -->
+                                        <Button Command="{Binding DataContext.ViewPdfReceiptCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                 CommandParameter="{Binding}"
                                                 Background="#211933"
                                                 BorderBrush="#7C3AED"
                                                 BorderThickness="1"
-                                                ToolTip="Gerar e salvar comprovante em PDF"
+                                                ToolTip="Visualizar ou gerar comprovante em PDF (abre no leitor padrão)"
                                                 Cursor="Hand"
                                                 Padding="6,3"
                                                 Margin="0,0,6,0">
@@ -1253,6 +1280,98 @@
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                 <TextBlock Text="📖" Margin="0,0,6,0" VerticalAlignment="Center" />
                                 <TextBlock Text="ABRIR PDF" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- ======================================================== -->
+        <!-- 6. MODAL OVERLAY: FEEDBACK EXPORTAÇÃO CSV / EXCEL        -->
+        <!-- ======================================================== -->
+        <Grid Grid.RowSpan="4"
+              Margin="-24"
+              Background="#B2000000">
+            <Grid.Style>
+                <Style TargetType="Grid">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsExportFeedbackOpen}" Value="True">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Grid.Style>
+
+            <Border Background="{DynamicResource CardDarkBrush}"
+                    BorderBrush="{DynamicResource BorderDarkBrush}"
+                    BorderThickness="1"
+                    CornerRadius="12"
+                    Width="500"
+                    MaxWidth="560"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Padding="24">
+                <StackPanel>
+                    <Grid Margin="0,0,0,16">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="📊" FontSize="20" Margin="0,0,8,0" />
+                            <TextBlock Text="{Binding ExportFeedbackTitle}"
+                                       FontSize="16"
+                                       FontWeight="Bold"
+                                       Foreground="{DynamicResource TextPrimaryBrush}" />
+                        </StackPanel>
+
+                        <Button Command="{Binding CloseExportFeedbackCommand}"
+                                Content="✕"
+                                FontSize="14"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Foreground="{DynamicResource TextSecondaryBrush}"
+                                HorizontalAlignment="Right"
+                                Cursor="Hand" />
+                    </Grid>
+
+                    <Border Background="{DynamicResource SurfaceBrush}"
+                            BorderBrush="{DynamicResource BorderDarkBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="14"
+                            Margin="0,0,0,18">
+                        <TextBlock Text="{Binding ExportFeedbackMessage}"
+                                   FontSize="13"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   TextWrapping="Wrap"
+                                   LineHeight="20" />
+                    </Border>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Command="{Binding CloseExportFeedbackCommand}"
+                                Content="FECHAR"
+                                Height="36" />
+
+                        <Button Grid.Column="2"
+                                Command="{Binding OpenExportedFileCommand}"
+                                IsEnabled="{Binding CanOpenExportedFile}"
+                                Height="36"
+                                Cursor="Hand">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource PrimaryButtonStyle}">
+                                    <Setter Property="Background" Value="#2563EB" />
+                                </Style>
+                            </Button.Style>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <TextBlock Text="📂" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                <TextBlock Text="ABRIR ARQUIVO" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
                     </Grid>

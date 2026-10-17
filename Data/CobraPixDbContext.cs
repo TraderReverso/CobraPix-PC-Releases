@@ -16,6 +16,7 @@ namespace CobraPix_PC.Data
         public DbSet<MonthlyCustomer> MonthlyCustomers => Set<MonthlyCustomer>();
         public DbSet<MonthlyPayment> MonthlyPayments => Set<MonthlyPayment>();
         public DbSet<AppSetting> AppSettings => Set<AppSetting>();
+        public DbSet<Reminder> Reminders => Set<Reminder>();
 
         public CobraPixDbContext()
         {
@@ -175,6 +176,33 @@ namespace CobraPix_PC.Data
                 entity.Property(s => s.Key).IsRequired().HasMaxLength(100);
                 entity.Property(s => s.Value).IsRequired().HasMaxLength(2000);
                 entity.HasIndex(s => s.Key).IsUnique();
+            });
+
+            // ==========================================
+            // Entidade: Reminder (Módulo Lembretes v1.0.5)
+            // ==========================================
+            modelBuilder.Entity<Reminder>(entity =>
+            {
+                entity.ToTable("Reminders");
+                entity.HasKey(r => r.Id);
+                entity.Property(r => r.Title).IsRequired().HasMaxLength(200);
+                entity.Property(r => r.Description).HasMaxLength(2000);
+                entity.Property(r => r.Category).IsRequired().HasMaxLength(50);
+                entity.Property(r => r.Priority).HasDefaultValue(ReminderPriority.Normal);
+                entity.Property(r => r.Status).HasDefaultValue(ReminderStatus.Pending);
+                entity.Property(r => r.Recurrence).HasDefaultValue(ReminderRecurrence.None);
+                entity.Property(r => r.CustomIntervalDays);
+                entity.Property(r => r.SnoozeCount).HasDefaultValue(0);
+                entity.Property(r => r.RescheduledAt);
+                entity.Property(r => r.CreatedAt).IsRequired();
+                entity.Property(r => r.CompletedAt);
+                entity.Property(r => r.UpdatedAt);
+                entity.Property(r => r.HistoryLog).HasMaxLength(4000);
+
+                entity.HasIndex(r => r.DueDate);
+                entity.HasIndex(r => r.Status);
+                entity.HasIndex(r => r.Category);
+                entity.HasIndex(r => r.Priority);
             });
         }
     }

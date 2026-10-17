@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position=0)]
-    [string]$Version = "1.0.3",
+    [string]$Version = "1.0.5",
 
     [Parameter()]
     [string]$Configuration = "Release",
@@ -191,14 +191,23 @@ Write-Host "OK: Integridade e seguranca interna do ZIP 100% verificadas." -Foreg
 Write-Host "[8/8] Calculando SHA-256 e gerando manifestos..." -ForegroundColor Yellow
 $sha256 = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash.ToUpperInvariant()
 
-$releaseNotes = @(
-    "Versao comercial 1.0.3 do CobraPix PC - agora com sistema PRO via licenca digital",
-    "Ativacao PRO offline com licenca ECDSA segura (mensal 30 dias / anual 365 dias)",
-    "Preservacao integral garantida de dados e bancos de dados SQLite locais",
-    "Otimizacoes de desempenho e integridade em Windows 10 e Windows 11",
-    "Antes de atualizar, recomendamos fazer um backup dos seus dados.",
-    "Os dados do CobraPix permanecem armazenados localmente com total seguranca."
-)
+$releaseNotes = if ($Version -eq "1.0.5") {
+    @(
+        "Versao comercial 1.0.5 do CobraPix PC - cinco grandes melhorias de produtividade e controle",
+        "Painel Inicial (Dashboard) com resumo de cobrancas pendentes/vencidas, proximas cobrancas, lembretes urgentes e atalhos rapidos",
+        "Modulo Lembretes completo com prioridades, adiantamento rapido (snooze), historico e recorrencias diaria, semanal e mensal",
+        "Pesquisa, filtros avancados e exportacao de relatorios financeiros para CSV e Excel (.xlsx)",
+        "Diagnostico e registro de erros resiliente com sanitizacao de dados sensiveis e controle rotativo de logs",
+        "Processo seguro de atualizacao com preservacao integral garantida do banco de dados e configuracoes locais"
+    )
+} else {
+    @(
+        "Versao comercial $Version do CobraPix PC",
+        "Melhorias gerais de estabilidade, usabilidade e correcoes",
+        "Preservacao integral de dados e bancos de dados SQLite locais",
+        "Antes de atualizar, recomendamos fazer um backup preventivo dos seus dados."
+    )
+}
 
 $manifestData = [ordered]@{
     version = $Version

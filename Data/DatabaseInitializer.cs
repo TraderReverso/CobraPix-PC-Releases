@@ -19,7 +19,54 @@ namespace CobraPix_PC.Data
 
             // Instancia o contexto e assegura que as tabelas sejam criadas
             using var context = new CobraPixDbContext();
-            return context.Database.EnsureCreated();
+            bool created = context.Database.EnsureCreated();
+
+            // Garante de forma estritamente aditiva e não-destrutiva que a tabela Reminders exista em bases pré-existentes
+            EnsureRemindersTableCreated(context);
+
+            return created;
+        }
+
+        public static void EnsureRemindersTableCreated(CobraPixDbContext context)
+        {
+            try
+            {
+                var conn = Microsoft.EntityFrameworkCore.RelationalDatabaseFacadeExtensions.GetDbConnection(context.Database);
+                bool wasClosed = conn.State != System.Data.ConnectionState.Open;
+                if (wasClosed) conn.Open();
+
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    CREATE TABLE IF NOT EXISTS Reminders (
+                        Id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        Title TEXT NOT NULL,
+                        Description TEXT NULL,
+                        DueDate TEXT NULL,
+                        Priority INTEGER NOT NULL DEFAULT 1,
+                        Category TEXT NOT NULL DEFAULT 'Geral',
+                        Status INTEGER NOT NULL DEFAULT 0,
+                        Recurrence INTEGER NOT NULL DEFAULT 0,
+                        CustomIntervalDays INTEGER NULL,
+                        SnoozeCount INTEGER NOT NULL DEFAULT 0,
+                        RescheduledAt TEXT NULL,
+                        CreatedAt TEXT NOT NULL,
+                        CompletedAt TEXT NULL,
+                        UpdatedAt TEXT NULL,
+                        HistoryLog TEXT NULL
+                    );
+                    CREATE INDEX IF NOT EXISTS IX_Reminders_DueDate ON Reminders (DueDate);
+                    CREATE INDEX IF NOT EXISTS IX_Reminders_Status ON Reminders (Status);
+                    CREATE INDEX IF NOT EXISTS IX_Reminders_Category ON Reminders (Category);
+                    CREATE INDEX IF NOT EXISTS IX_Reminders_Priority ON Reminders (Priority);
+                ";
+                cmd.ExecuteNonQuery();
+
+                if (wasClosed) conn.Close();
+            }
+            catch
+            {
+                // Tratamento seguro em caso de concorrência ou base em memória
+            }
         }
     }
 }

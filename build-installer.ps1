@@ -1,11 +1,11 @@
 # =====================================================================
 # Script oficial de geracao do instalador CobraPix PC via Inno Setup 6
-# Versao: 1.0.3
+# Versao: 1.0.5
 # =====================================================================
 [CmdletBinding()]
 param(
     [Parameter(Position=0)]
-    [string]$Version = "1.0.3"
+    [string]$Version = "1.0.5"
 )
 
 $ErrorActionPreference = "Stop"

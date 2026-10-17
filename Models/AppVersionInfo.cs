@@ -11,7 +11,7 @@ namespace CobraPix_PC.Models
         /// <summary>
         /// Versão oficial instalada do CobraPix PC.
         /// </summary>
-        public const string CurrentVersion = "1.0.3";
+        public const string CurrentVersion = "1.0.5";
 
         /// <summary>
         /// Valida se uma string segue estritamente o formato SemVer MAJOR.MINOR.PATCH (ex: 1.0.0).

@@ -54,6 +54,7 @@ namespace CobraPix_PC.ViewModels.Modules
         private readonly IFinancialHistoryService _historyService;
         private readonly IWhatsAppService _whatsAppService;
         private readonly IReceiptPdfService _pdfService;
+        private readonly IReportExportService _reportExportService;
         private readonly List<FinancialTransactionItemViewModel> _allTransactions = new();
 
         private bool _isLoading;
@@ -65,6 +66,13 @@ namespace CobraPix_PC.ViewModels.Modules
         private string _generatedPdfPath = string.Empty;
         private string _pdfFeedbackTitle = string.Empty;
         private string _pdfFeedbackMessage = string.Empty;
+
+        // Feedback de Exportação (CSV / Excel)
+        private bool _isExporting;
+        private bool _isExportFeedbackOpen;
+        private string _exportFeedbackTitle = string.Empty;
+        private string _exportFeedbackMessage = string.Empty;
+        private string _exportedFilePath = string.Empty;
 
         // Filtro de Mês/Ano (Navegação Android)
         private int _selectedMonth = DateTime.Today.Month;
@@ -344,6 +352,47 @@ namespace CobraPix_PC.ViewModels.Modules
 
         public bool CanOpenPdf => !string.IsNullOrWhiteSpace(GeneratedPdfPath);
 
+        // Feedback de Exportação
+        public bool IsExporting
+        {
+            get => _isExporting;
+            set => SetProperty(ref _isExporting, value);
+        }
+
+        public bool IsExportFeedbackOpen
+        {
+            get => _isExportFeedbackOpen;
+            set => SetProperty(ref _isExportFeedbackOpen, value);
+        }
+
+        public string ExportFeedbackTitle
+        {
+            get => _exportFeedbackTitle;
+            set => SetProperty(ref _exportFeedbackTitle, value);
+        }
+
+        public string ExportFeedbackMessage
+        {
+            get => _exportFeedbackMessage;
+            set => SetProperty(ref _exportFeedbackMessage, value);
+        }
+
+        public string ExportedFilePath
+        {
+            get => _exportedFilePath;
+            set
+            {
+                if (SetProperty(ref _exportedFilePath, value))
+                {
+                    OnPropertyChanged(nameof(CanOpenExportedFile));
+                }
+            }
+        }
+
+        public bool CanOpenExportedFile => !string.IsNullOrWhiteSpace(ExportedFilePath) && System.IO.File.Exists(ExportedFilePath);
+
+        public Func<string, string, string, string, string?>? SaveFileDialogFunc { get; set; }
+
         // Comandos
         public ICommand LoadTransactionsCommand { get; }
         public ICommand PreviousMonthCommand { get; }
@@ -355,25 +404,33 @@ namespace CobraPix_PC.ViewModels.Modules
         public ICommand ResetFiltersCommand { get; }
         public ICommand OpenWhatsAppReceiptCommand { get; }
         public ICommand GeneratePdfReceiptCommand { get; }
+        public ICommand ViewPdfReceiptCommand { get; }
         public ICommand OpenPdfCommand { get; }
         public ICommand ClosePdfFeedbackCommand { get; }
+        public ICommand ExportCsvCommand { get; }
+        public ICommand ExportExcelCommand { get; }
+        public ICommand OpenExportedFileCommand { get; }
+        public ICommand CloseExportFeedbackCommand { get; }
 
         public HistoricoFinanceiroViewModel()
             : this(
                 App.Services?.GetService<IFinancialHistoryService>() ?? new FinancialHistoryService(new CobraPixDbContext()),
                 App.Services?.GetService<IWhatsAppService>() ?? new WhatsAppService(),
-                App.Services?.GetService<IReceiptPdfService>() ?? new ReceiptPdfService())
+                App.Services?.GetService<IReceiptPdfService>() ?? new ReceiptPdfService(),
+                App.Services?.GetService<IReportExportService>() ?? new ReportExportService())
         {
         }
 
         public HistoricoFinanceiroViewModel(
             IFinancialHistoryService historyService,
             IWhatsAppService? whatsAppService = null,
-            IReceiptPdfService? pdfService = null)
+            IReceiptPdfService? pdfService = null,
+            IReportExportService? reportExportService = null)
         {
             _historyService = historyService ?? throw new ArgumentNullException(nameof(historyService));
             _whatsAppService = whatsAppService ?? App.Services?.GetService<IWhatsAppService>() ?? new WhatsAppService();
             _pdfService = pdfService ?? App.Services?.GetService<IReceiptPdfService>() ?? new ReceiptPdfService();
+            _reportExportService = reportExportService ?? App.Services?.GetService<IReportExportService>() ?? new ReportExportService();
 
             WhatsAppPreview = new WhatsAppPreviewViewModel(_whatsAppService);
 
@@ -409,8 +466,13 @@ namespace CobraPix_PC.ViewModels.Modules
             ResetFiltersCommand = new RelayCommand(ResetFilters);
             OpenWhatsAppReceiptCommand = new RelayCommand<FinancialTransactionItemViewModel>(OpenWhatsAppReceipt);
             GeneratePdfReceiptCommand = new RelayCommand<FinancialTransactionItemViewModel>(item => GeneratePdfReceipt(item));
+            ViewPdfReceiptCommand = new RelayCommand<FinancialTransactionItemViewModel>(item => ViewOrGeneratePdfReceipt(item));
             OpenPdfCommand = new RelayCommand(OpenGeneratedPdf);
             ClosePdfFeedbackCommand = new RelayCommand(ClosePdfFeedback);
+            ExportCsvCommand = new RelayCommand(async () => await ExportToCsvAsync());
+            ExportExcelCommand = new RelayCommand(async () => await ExportToExcelAsync());
+            OpenExportedFileCommand = new RelayCommand(OpenExportedFile);
+            CloseExportFeedbackCommand = new RelayCommand(CloseExportFeedback);
 
             _ = LoadTransactionsAsync();
         }
@@ -674,7 +736,30 @@ namespace CobraPix_PC.ViewModels.Modules
             string clientName = item.ClientName;
             string? phone = item.ClientPhone;
             string subject = item.IsMonthly ? "⭐ Mensalidade Quitada" : "💰 Parcela Quitada";
-            string msg = $"Olá, {clientName}! Confirmamos o recebimento de {item.FormattedAmount} referente a {item.Description} em {item.FormattedDate}. Agradecemos o pagamento!";
+
+            string msg;
+            if (item.IsMonthly)
+            {
+                msg = _whatsAppService.GeneratePagamentoMensalidadeConfirmadoMessage(
+                    item.ClientName,
+                    item.Competence ?? item.Description,
+                    item.Amount,
+                    item.Date,
+                    totalPaid: item.TotalPaid,
+                    remainingBalance: item.RemainingBalance,
+                    paymentMethod: item.FormattedMethod);
+            }
+            else
+            {
+                msg = _whatsAppService.GeneratePagamentoConfirmadoMessage(
+                    item.ClientName,
+                    item.Description,
+                    item.Amount,
+                    item.Date,
+                    totalPaid: item.TotalPaid,
+                    remainingBalance: item.RemainingBalance,
+                    paymentMethod: item.FormattedMethod);
+            }
 
             WhatsAppPreview.Open(
                 clientName,
@@ -682,6 +767,32 @@ namespace CobraPix_PC.ViewModels.Modules
                 subject,
                 item.Amount,
                 msg);
+        }
+
+        public string? ViewOrGeneratePdfReceipt(FinancialTransactionItemViewModel? item)
+        {
+            if (item == null) return null;
+            return ViewOrGeneratePdfReceiptForTransaction(item.Transaction);
+        }
+
+        public string? ViewOrGeneratePdfReceiptForTransaction(FinancialTransaction transaction)
+        {
+            if (transaction == null) return null;
+
+            try
+            {
+                string path = _pdfService.ViewOrGenerateReceipt(transaction);
+                GeneratedPdfPath = path;
+                return path;
+            }
+            catch (Exception ex)
+            {
+                PdfFeedbackTitle = "Erro ao Visualizar Comprovante";
+                PdfFeedbackMessage = $"Não foi possível abrir o comprovante em PDF: {ex.Message}";
+                GeneratedPdfPath = string.Empty;
+                IsPdfSuccessOpen = true;
+                return null;
+            }
         }
 
         public string? GeneratePdfReceipt(FinancialTransactionItemViewModel? item, string? customDestinationPath = null)
@@ -766,5 +877,142 @@ namespace CobraPix_PC.ViewModels.Modules
             12 => "Dezembro",
             _ => "Mês"
         };
+
+        public string GetCurrentPeriodDescription()
+        {
+            return PeriodPreset switch
+            {
+                HistoryPeriodPreset.Month => MonthYearDisplayName,
+                HistoryPeriodPreset.Today => $"Hoje ({DateTime.Today:dd/MM/yyyy})",
+                HistoryPeriodPreset.Last7Days => $"Últimos 7 dias ({DateTime.Today.AddDays(-7):dd/MM/yyyy} a {DateTime.Today:dd/MM/yyyy})",
+                HistoryPeriodPreset.Last30Days => $"Últimos 30 dias ({DateTime.Today.AddDays(-30):dd/MM/yyyy} a {DateTime.Today:dd/MM/yyyy})",
+                HistoryPeriodPreset.CurrentYear => $"Ano {DateTime.Today.Year}",
+                HistoryPeriodPreset.All => "Todo o Histórico",
+                HistoryPeriodPreset.Custom => $"Personalizado ({CustomStartDate:dd/MM/yyyy} a {CustomEndDate:dd/MM/yyyy})",
+                _ => MonthYearDisplayName
+            };
+        }
+
+        public async Task ExportToCsvAsync()
+        {
+            string defaultName = $"CobraPix_Relatorio_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+            string? targetFile = SaveFileDialogFunc != null
+                ? SaveFileDialogFunc("Exportar Relatório Financeiro (CSV)", "Arquivo CSV (*.csv)|*.csv", ".csv", defaultName)
+                : DefaultSaveFileDialog("Exportar Relatório Financeiro (CSV)", "Arquivo CSV (*.csv)|*.csv", ".csv", defaultName);
+
+            if (string.IsNullOrWhiteSpace(targetFile)) return;
+
+            IsExporting = true;
+            try
+            {
+                var result = await _reportExportService.ExportToCsvAsync(
+                    targetFile,
+                    FilteredTransactions,
+                    GetCurrentPeriodDescription(),
+                    TotalReceived,
+                    InstallmentsTotal,
+                    MonthlyTotal);
+
+                ExportedFilePath = result.FilePath ?? string.Empty;
+                ExportFeedbackTitle = result.Success ? "Exportação Concluída 📄" : "Falha na Exportação";
+                ExportFeedbackMessage = result.Message ?? string.Empty;
+                IsExportFeedbackOpen = true;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLogger.Instance.LogError("HistoricoFinanceiro", ex, "Exportação de CSV falhou");
+                ExportFeedbackTitle = "Erro ao Exportar CSV";
+                ExportFeedbackMessage = "Ocorreu um erro ao exportar os dados: " + ex.Message;
+                ExportedFilePath = string.Empty;
+                IsExportFeedbackOpen = true;
+            }
+            finally
+            {
+                IsExporting = false;
+            }
+        }
+
+        public async Task ExportToExcelAsync()
+        {
+            string defaultName = $"CobraPix_Relatorio_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+            string? targetFile = SaveFileDialogFunc != null
+                ? SaveFileDialogFunc("Exportar Relatório Financeiro (Excel)", "Planilha Excel (*.xlsx)|*.xlsx", ".xlsx", defaultName)
+                : DefaultSaveFileDialog("Exportar Relatório Financeiro (Excel)", "Planilha Excel (*.xlsx)|*.xlsx", ".xlsx", defaultName);
+
+            if (string.IsNullOrWhiteSpace(targetFile)) return;
+
+            IsExporting = true;
+            try
+            {
+                var result = await _reportExportService.ExportToExcelAsync(
+                    targetFile,
+                    FilteredTransactions,
+                    GetCurrentPeriodDescription(),
+                    TotalReceived,
+                    InstallmentsTotal,
+                    MonthlyTotal);
+
+                ExportedFilePath = result.FilePath ?? string.Empty;
+                ExportFeedbackTitle = result.Success ? "Exportação Concluída 📊" : "Falha na Exportação";
+                ExportFeedbackMessage = result.Message ?? string.Empty;
+                IsExportFeedbackOpen = true;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLogger.Instance.LogError("HistoricoFinanceiro", ex, "Exportação de Excel falhou");
+                ExportFeedbackTitle = "Erro ao Exportar Excel";
+                ExportFeedbackMessage = "Ocorreu um erro ao gerar a planilha Excel: " + ex.Message;
+                ExportedFilePath = string.Empty;
+                IsExportFeedbackOpen = true;
+            }
+            finally
+            {
+                IsExporting = false;
+            }
+        }
+
+        private static string? DefaultSaveFileDialog(string title, string filter, string defaultExt, string defaultFileName)
+        {
+            try
+            {
+                var sfd = new Microsoft.Win32.SaveFileDialog
+                {
+                    Title = title,
+                    Filter = filter,
+                    DefaultExt = defaultExt,
+                    FileName = defaultFileName
+                };
+                return sfd.ShowDialog() == true ? sfd.FileName : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        public void OpenExportedFile()
+        {
+            if (CanOpenExportedFile)
+            {
+                try
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = ExportedFilePath,
+                        UseShellExecute = true
+                    });
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLogger.Instance.LogError("HistoricoFinanceiro", ex, "Falha ao abrir arquivo exportado");
+                }
+            }
+            IsExportFeedbackOpen = false;
+        }
+
+        public void CloseExportFeedback()
+        {
+            IsExportFeedbackOpen = false;
+        }
     }
 }

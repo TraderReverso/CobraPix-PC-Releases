@@ -14,7 +14,8 @@ namespace CobraPix_PC.Models
         QuintoDiaUtil,
         ResumoAtrasados,
         ResumoMensalidades,
-        Info
+        Info,
+        Lembrete
     }
 
     /// <summary>
@@ -42,6 +43,7 @@ namespace CobraPix_PC.Models
             NotificationType.ParcelaProxima => "⏰",
             NotificationType.MensalidadeProxima => "⭐",
             NotificationType.QuintoDiaUtil => "💼",
+            NotificationType.Lembrete => "📝",
             _ => "🔔"
         };
 
@@ -54,6 +56,7 @@ namespace CobraPix_PC.Models
             NotificationType.ParcelaProxima => "Vencendo",
             NotificationType.MensalidadeProxima => "Mensalidade Próxima",
             NotificationType.QuintoDiaUtil => "5º Dia Útil",
+            NotificationType.Lembrete => "Lembrete",
             _ => "Aviso"
         };
     }

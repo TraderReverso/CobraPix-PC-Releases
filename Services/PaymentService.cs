@@ -89,6 +89,7 @@ namespace CobraPix_PC.Services
             }
 
             await _context.SaveChangesAsync();
+            DiagnosticLogger.Instance.LogInformation("PaymentService", $"Pagamento registrado para parcela #{installmentId}. Método: {paymentMethod}. Status resultante: {installment.Status}");
             return payment;
         }
 

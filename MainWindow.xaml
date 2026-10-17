@@ -95,6 +95,11 @@
             <views:HistoricoFinanceiroView />
         </DataTemplate>
 
+        <!-- DataTemplate específico para o Módulo de Lembretes & Tarefas (v1.0.5) -->
+        <DataTemplate DataType="{x:Type vmm:LembretesViewModel}">
+            <views:LembretesView />
+        </DataTemplate>
+
         <!-- DataTemplate padrão para todos os módulos baseados em ModuleViewModelBase -->
         <DataTemplate DataType="{x:Type vm:ModuleViewModelBase}">
             <views:ModulePlaceholderView />

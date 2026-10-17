@@ -71,7 +71,8 @@ namespace CobraPix_PC.ViewModels
                 App.Services?.GetService<IBackupService>(),
                 App.Services?.GetService<IProService>(),
                 App.Services?.GetService<IFinancialHistoryService>(),
-                App.Services?.GetService<IThemeService>())
+                App.Services?.GetService<IThemeService>(),
+                App.Services?.GetService<IReminderService>())
         {
         }
 
@@ -85,7 +86,8 @@ namespace CobraPix_PC.ViewModels
             IBackupService? backupService = null,
             IProService? proService = null,
             IFinancialHistoryService? financialHistoryService = null,
-            IThemeService? themeService = null)
+            IThemeService? themeService = null,
+            IReminderService? reminderService = null)
         {
             var dbContext = App.Services?.GetService<CobraPixDbContext>() ?? new CobraPixDbContext();
             _dbContext = dbContext;
@@ -99,6 +101,7 @@ namespace CobraPix_PC.ViewModels
             var proSvc = proService ?? App.Services?.GetService<IProService>() ?? new ProService(dbContext);
             var historySvc = financialHistoryService ?? App.Services?.GetService<IFinancialHistoryService>() ?? new FinancialHistoryService(dbContext);
             var themeSvc = themeService ?? App.Services?.GetService<IThemeService>() ?? new ThemeService(dbContext);
+            var reminderSvc = reminderService ?? App.Services?.GetService<IReminderService>() ?? new ReminderService(dbContext);
 
             // Declaração dos ViewModels com interconexão de navegação e sincronização
             ClientesViewModel clientesVm = null!;
@@ -115,6 +118,7 @@ namespace CobraPix_PC.ViewModels
             ArquivadosViewModel arquivadosVm = null!;
             RanqueamentoViewModel ranqueamentoVm = null!;
             HistoricoFinanceiroViewModel historicoFinanceiroVm = null!;
+            LembretesViewModel lembretesVm = null!;
 
             void NavigateToModuleName(string moduleName)
             {
@@ -144,6 +148,7 @@ namespace CobraPix_PC.ViewModels
                 _ = quitadosVm.LoadQuitadosAsync();
                 _ = ranqueamentoVm.LoadDataAsync();
                 _ = historicoFinanceiroVm.LoadTransactionsAsync();
+                _ = lembretesVm.LoadDataAsync();
             }
 
             void OpenPayment(int installmentId)
@@ -173,7 +178,7 @@ namespace CobraPix_PC.ViewModels
                 _ = vendasVm.OpenNewSaleForClientAsync(clientId);
             }
 
-            dashboardVm = new DashboardViewModel(dbContext, proSvc, NavigateToModuleName);
+            dashboardVm = new DashboardViewModel(dbContext, proSvc, NavigateToModuleName, reminderSvc);
             clientesVm = new ClientesViewModel(clientSvc, whatsAppSvc, proSvc, historySvc);
             vendasVm = new VendasViewModel(saleSvc, clientSvc, paymentSvc, OpenPayment);
             parcelasVm = new ParcelasViewModel(paymentSvc, OpenPayment);
@@ -187,6 +192,8 @@ namespace CobraPix_PC.ViewModels
             arquivadosVm = new ArquivadosViewModel(dbContext, clientSvc);
             ranqueamentoVm = new RanqueamentoViewModel(dbContext);
             historicoFinanceiroVm = new HistoricoFinanceiroViewModel(historySvc, whatsAppSvc);
+
+            lembretesVm = new LembretesViewModel(reminderSvc, notificationSvc);
 
             var androidImportSvc = App.Services?.GetService<IAndroidImportService>() ?? new AndroidImportService(dbContext);
             var configVm = new ConfiguracoesViewModel(notificationSvc, backupSvc, proSvc, themeSvc, androidImportSvc);
@@ -214,6 +221,7 @@ namespace CobraPix_PC.ViewModels
                 _ = arquivadosVm.LoadArquivadosAsync();
                 _ = ranqueamentoVm.LoadDataAsync();
                 _ = historicoFinanceiroVm.LoadTransactionsAsync();
+                _ = lembretesVm.LoadDataAsync();
             }
 
             configVm.OnDataImported = ReloadAllData;
@@ -231,6 +239,7 @@ namespace CobraPix_PC.ViewModels
             RecurrenceMenuItems.Add(new NavigationItem("Vencimentos", "⏰", vencimentosVm));
             RecurrenceMenuItems.Add(new NavigationItem("Atrasados", "⚠️", atrasadosVm));
             RecurrenceMenuItems.Add(new NavigationItem("Cobranças", "💬", cobrancasVm));
+            RecurrenceMenuItems.Add(new NavigationItem("Lembretes", "📝", lembretesVm));
 
             // Consultas e Status
             StatusMenuItems.Add(new NavigationItem("Quitados", "✅", quitadosVm));
@@ -336,6 +345,10 @@ namespace CobraPix_PC.ViewModels
             else if (targetItem.ViewModel is HistoricoFinanceiroViewModel hVm)
             {
                 _ = hVm.LoadTransactionsAsync();
+            }
+            else if (targetItem.ViewModel is LembretesViewModel lemVm)
+            {
+                _ = lemVm.LoadDataAsync();
             }
         }
     }
