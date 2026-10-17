@@ -1,7 +1,12 @@
 using System;
 using System.Diagnostics;
 using System.Globalization;
+using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using CobraPix_PC.Data;
 using CobraPix_PC.Services.Interfaces;
 
 namespace CobraPix_PC.Services
@@ -9,15 +14,45 @@ namespace CobraPix_PC.Services
     /// <summary>
     /// Serviço de integração com WhatsApp.
     /// Valida números, normaliza para formato internacional brasileiro sem duplicar DDI,
-    /// constrói link seguro para WhatsApp e dispara a abertura de conversa no Windows.
+    /// constrói link seguro para WhatsApp, dispara a abertura de conversa no Windows,
+    /// gera saudações dinâmicas pelo horário local e insere chave Pix configurável automaticamente.
     /// </summary>
     public class WhatsAppService : IWhatsAppService
     {
         private static readonly CultureInfo PtBr = new("pt-BR");
+        private readonly CobraPixDbContext? _dbContext;
         private readonly Func<string, bool>? _urlLauncher;
+        private string? _pixKey;
+        private bool _pixKeyLoaded;
+
+        public const string SettingKeyPixKey = "App.PixKey";
+
+        public string? PixKey
+        {
+            get
+            {
+                if (!_pixKeyLoaded)
+                {
+                    _pixKey = GetConfiguredPixKey();
+                    _pixKeyLoaded = true;
+                }
+                return _pixKey;
+            }
+            set
+            {
+                _pixKey = value;
+                _pixKeyLoaded = true;
+            }
+        }
 
         public WhatsAppService(Func<string, bool>? urlLauncher = null)
         {
+            _urlLauncher = urlLauncher;
+        }
+
+        public WhatsAppService(CobraPixDbContext dbContext, Func<string, bool>? urlLauncher = null)
+        {
+            _dbContext = dbContext;
             _urlLauncher = urlLauncher;
         }
 
@@ -83,7 +118,7 @@ namespace CobraPix_PC.Services
             string safeMessage = message ?? string.Empty;
             string encoded = Uri.EscapeDataString(safeMessage);
 
-            return $"https://wa.me/{normalized}?text={encoded}";
+            return $"https://api.whatsapp.com/send?phone={normalized}&text={encoded}";
         }
 
         public bool OpenWhatsApp(string? phone, string message)
@@ -120,37 +155,241 @@ namespace CobraPix_PC.Services
             }
         }
 
-        public string GenerateParcelaAtrasadaMessage(string clientName, string reference, DateTime dueDate, decimal remainingBalance)
+        /// <summary>
+        /// Gera a saudação dinâmica baseada no horário local do computador:
+        /// 05:00 até 11:59: "Bom dia"
+        /// 12:00 até 17:59: "Boa tarde"
+        /// 18:00 até 04:59: "Boa noite"
+        /// </summary>
+        public string GetGreeting(DateTime? dateTime = null)
         {
-            string nome = FormatClientFirstNameOrFullName(clientName);
-            string data = dueDate.ToString("dd/MM/yyyy");
-            string saldo = remainingBalance.ToString("C2", PtBr);
+            var dt = dateTime ?? DateTime.Now;
+            int hour = dt.Hour;
 
-            return $"Olá, {nome}! Tudo bem?\n\nPassando para lembrar sobre a parcela {reference}, com vencimento em {data}.\n\nO valor pendente é de {saldo}.\n\nSe precisar de alguma informação, estou à disposição.";
+            if (hour >= 5 && hour < 12)
+                return "Bom dia";
+            if (hour >= 12 && hour < 18)
+                return "Boa tarde";
+            return "Boa noite";
         }
 
-        public string GenerateMensalidadeAtrasadaMessage(string clientName, string competence, DateTime dueDate, decimal amount)
+        // Constantes com sequências de escape Unicode explícitas para garantir 100% de preservação
+        // contra qualquer falha de codepage/encoding de arquivo de código-fonte no compilador.
+        public const string EmojiSorriso = "\uD83D\uDE0A";     // 😊 (U+1F60A)
+        public const string EmojiDinheiro = "\uD83D\uDCB0";    // 💰 (U+1F4B0)
+        public const string EmojiAmpulheta = "\u23F3";          // ⏳ (U+23F3)
+        public const string EmojiCheck = "\u2705";              // ✅ (U+2705)
+
+        private static string FormatParcelaReference(string reference)
         {
+            if (string.IsNullOrWhiteSpace(reference)) return "em aberto";
+            string trimmed = reference.Trim();
+            var match = Regex.Match(trimmed, @"\b(\d+/\d+)\b");
+            if (match.Success) return match.Groups[1].Value;
+
+            if (trimmed.StartsWith("Parc. ", StringComparison.OrdinalIgnoreCase))
+                trimmed = trimmed.Substring(6).Trim();
+            else if (trimmed.StartsWith("Parcela ", StringComparison.OrdinalIgnoreCase))
+                trimmed = trimmed.Substring(8).Trim();
+
+            return trimmed;
+        }
+
+        private static string FormatDueCondition(DateTime dueDate, DateTime referenceDate)
+        {
+            string dataStr = dueDate.ToString("dd/MM/yyyy");
+            if (dueDate.Date == referenceDate.Date)
+            {
+                return $"com vencimento para hoje ({dataStr})";
+            }
+            if (dueDate.Date < referenceDate.Date)
+            {
+                return $"que venceu em {dataStr} e encontra-se em atraso";
+            }
+            return $"com vencimento para {dataStr}";
+        }
+
+        private static string FormatFinancialBlock(decimal totalPaid, decimal remainingBalance)
+        {
+            return $"{EmojiDinheiro} Total já pago: {totalPaid.ToString("C2", PtBr)}\n{EmojiAmpulheta} Falta pagar: {remainingBalance.ToString("C2", PtBr)}";
+        }
+
+        private string FormatPixBlock(string? pixKey)
+        {
+            string effectivePixKey = (!string.IsNullOrWhiteSpace(pixKey) ? pixKey : PixKey)?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(effectivePixKey))
+                return string.Empty;
+
+            return $"\n\nPara sua comodidade, segue a chave Pix para pagamento:\n{effectivePixKey}";
+        }
+
+        public string GenerateParcelaAtrasadaMessage(
+            string clientName,
+            string reference,
+            DateTime dueDate,
+            decimal amount,
+            decimal? totalPaid = null,
+            decimal? remainingBalance = null,
+            string? pixKey = null,
+            DateTime? referenceTime = null)
+        {
+            DateTime now = referenceTime ?? DateTime.Now;
+            string saudacao = GetGreeting(now);
             string nome = FormatClientFirstNameOrFullName(clientName);
-            string data = dueDate.ToString("dd/MM/yyyy");
+            string refParcela = FormatParcelaReference(reference);
             string valor = amount.ToString("C2", PtBr);
+            string dataStr = dueDate.ToString("dd/MM/yyyy");
 
-            return $"Olá, {nome}! Tudo bem?\n\nPassando para lembrar sobre a mensalidade referente a {competence}, com vencimento em {data}.\n\nO valor pendente é de {valor}.\n\nSe precisar de alguma informação, estou à disposição.";
+            decimal pago = totalPaid ?? 0.00m;
+            decimal saldo = remainingBalance ?? Math.Max(0m, amount - pago);
+
+            string financialBlock = FormatFinancialBlock(pago, saldo);
+            string pixBlock = FormatPixBlock(pixKey);
+
+            return $"{saudacao}, {nome}! Tudo bem? {EmojiSorriso}\n\nPassando para lembrar da sua parcela {refParcela}, no valor de {valor}, que venceu em {dataStr} e encontra-se em atraso.\n\n{financialBlock}{pixBlock}\n\nAssim que realizar o pagamento, por favor, envie o comprovante. Obrigado!";
         }
 
-        public string GenerateVencimentoProximoMessage(string clientName, string reference, DateTime dueDate, decimal amount)
+        public string GenerateMensalidadeAtrasadaMessage(
+            string clientName,
+            string competence,
+            DateTime dueDate,
+            decimal amount,
+            decimal? totalPaid = null,
+            decimal? remainingBalance = null,
+            string? pixKey = null,
+            DateTime? referenceTime = null)
         {
+            DateTime now = referenceTime ?? DateTime.Now;
+            string saudacao = GetGreeting(now);
             string nome = FormatClientFirstNameOrFullName(clientName);
-            string data = dueDate.ToString("dd/MM/yyyy");
             string valor = amount.ToString("C2", PtBr);
+            string dataStr = dueDate.ToString("dd/MM/yyyy");
 
-            return $"Olá, {nome}! Tudo bem?\n\nPassando para lembrar que {reference} vence em {data}.\n\nO valor é de {valor}.\n\nSe precisar de alguma informação, estou à disposição.";
+            decimal pago = totalPaid ?? 0.00m;
+            decimal saldo = remainingBalance ?? Math.Max(0m, amount - pago);
+
+            string financialBlock = FormatFinancialBlock(pago, saldo);
+            string pixBlock = FormatPixBlock(pixKey);
+
+            return $"{saudacao}, {nome}! Tudo bem? {EmojiSorriso}\n\nPassando para lembrar da sua mensalidade referente a {competence}, no valor de {valor}, que venceu em {dataStr} e encontra-se em atraso.\n\n{financialBlock}{pixBlock}\n\nAssim que realizar o pagamento, por favor, envie o comprovante. Obrigado!";
         }
 
-        public string GenerateSimpleContactMessage(string clientName)
+        public string GenerateVencimentoProximoMessage(
+            string clientName,
+            string reference,
+            DateTime dueDate,
+            decimal amount,
+            decimal? totalPaid = null,
+            decimal? remainingBalance = null,
+            string? pixKey = null,
+            DateTime? referenceTime = null)
+        {
+            DateTime now = referenceTime ?? DateTime.Now;
+            string saudacao = GetGreeting(now);
+            string nome = FormatClientFirstNameOrFullName(clientName);
+            string refParcela = FormatParcelaReference(reference);
+            string valor = amount.ToString("C2", PtBr);
+            string condicaoVencimento = FormatDueCondition(dueDate, now);
+
+            decimal pago = totalPaid ?? 0.00m;
+            decimal saldo = remainingBalance ?? Math.Max(0m, amount - pago);
+
+            string financialBlock = FormatFinancialBlock(pago, saldo);
+            string pixBlock = FormatPixBlock(pixKey);
+
+            string aberturaCorpo = dueDate.Date < now.Date
+                ? $"Passando para lembrar da sua parcela {refParcela}, no valor de {valor}, {condicaoVencimento}."
+                : $"Passando para lembrar do vencimento da sua parcela {refParcela}, no valor de {valor}, {condicaoVencimento}.";
+
+            return $"{saudacao}, {nome}! Tudo bem? {EmojiSorriso}\n\n{aberturaCorpo}\n\n{financialBlock}{pixBlock}\n\nAssim que realizar o pagamento, por favor, envie o comprovante. Obrigado!";
+        }
+
+        public string GeneratePagamentoConfirmadoMessage(
+            string clientName,
+            string reference,
+            decimal amountPaid,
+            DateTime paymentDate,
+            decimal? totalPaid = null,
+            decimal? remainingBalance = null,
+            string? paymentMethod = null,
+            DateTime? referenceTime = null)
+        {
+            DateTime now = referenceTime ?? DateTime.Now;
+            string saudacao = GetGreeting(now);
+            string nome = FormatClientFirstNameOrFullName(clientName);
+            string refParcela = FormatParcelaReference(reference);
+            string valor = amountPaid.ToString("C2", PtBr);
+            string dataHora = paymentDate.ToString("dd/MM/yyyy HH:mm");
+
+            var sb = new System.Text.StringBuilder();
+            sb.Append($"{saudacao}, {nome}! {EmojiSorriso}\n\n");
+            sb.Append($"Seu pagamento da parcela {refParcela}, no valor de {valor}, foi confirmado com sucesso em {dataHora}.\n");
+
+            if (!string.IsNullOrWhiteSpace(paymentMethod))
+            {
+                sb.Append($"Forma de pagamento: {paymentMethod}\n");
+            }
+
+            if (totalPaid.HasValue || remainingBalance.HasValue)
+            {
+                decimal pago = totalPaid ?? amountPaid;
+                decimal saldo = remainingBalance ?? 0m;
+                sb.Append($"\n{FormatFinancialBlock(pago, saldo)}\n");
+            }
+            else
+            {
+                sb.Append("\n");
+            }
+
+            sb.Append($"{EmojiCheck} Pagamento realizado com sucesso!\n\nObrigado pelo pagamento!");
+            return sb.ToString();
+        }
+
+        public string GeneratePagamentoMensalidadeConfirmadoMessage(
+            string clientName,
+            string competence,
+            decimal amountPaid,
+            DateTime paymentDate,
+            decimal? totalPaid = null,
+            decimal? remainingBalance = null,
+            string? paymentMethod = null,
+            DateTime? referenceTime = null)
+        {
+            DateTime now = referenceTime ?? DateTime.Now;
+            string saudacao = GetGreeting(now);
+            string nome = FormatClientFirstNameOrFullName(clientName);
+            string valor = amountPaid.ToString("C2", PtBr);
+            string dataHora = paymentDate.ToString("dd/MM/yyyy HH:mm");
+
+            var sb = new System.Text.StringBuilder();
+            sb.Append($"{saudacao}, {nome}! {EmojiSorriso}\n\n");
+            sb.Append($"Seu pagamento da mensalidade referente a {competence}, no valor de {valor}, foi confirmado com sucesso em {dataHora}.\n");
+
+            if (!string.IsNullOrWhiteSpace(paymentMethod))
+            {
+                sb.Append($"Forma de pagamento: {paymentMethod}\n");
+            }
+
+            if (totalPaid.HasValue || remainingBalance.HasValue)
+            {
+                decimal pago = totalPaid ?? amountPaid;
+                decimal saldo = remainingBalance ?? 0m;
+                sb.Append($"\n{FormatFinancialBlock(pago, saldo)}\n");
+            }
+            else
+            {
+                sb.Append("\n");
+            }
+
+            sb.Append($"{EmojiCheck} Pagamento realizado com sucesso!\n\nObrigado pelo pagamento!");
+            return sb.ToString();
+        }
+
+        public string GenerateSimpleContactMessage(string clientName, DateTime? referenceTime = null)
         {
             string nome = FormatClientFirstNameOrFullName(clientName);
-            return $"Olá, {nome}! Tudo bem?";
+            string saudacao = GetGreeting(referenceTime);
+            return $"Olá, {nome}! {saudacao}! Tudo bem? {EmojiSorriso}";
         }
 
         private static string FormatClientFirstNameOrFullName(string clientName)
@@ -158,6 +397,45 @@ namespace CobraPix_PC.Services
             if (string.IsNullOrWhiteSpace(clientName))
                 return "Cliente";
             return clientName.Trim();
+        }
+
+        private string? GetConfiguredPixKey()
+        {
+            if (_dbContext != null)
+            {
+                try
+                {
+                    var setting = _dbContext.AppSettings.AsNoTracking().FirstOrDefault(s => s.Key == SettingKeyPixKey);
+                    return setting?.Value;
+                }
+                catch (InvalidOperationException secEx) when (secEx.Message.Contains("[SEGURANÇA DE EXECUÇÃO]", StringComparison.Ordinal))
+                {
+                    throw;
+                }
+                catch
+                {
+                }
+                return null;
+            }
+
+            try
+            {
+                using var scope = App.Services?.CreateScope();
+                var ctx = scope?.ServiceProvider.GetService<CobraPixDbContext>();
+                if (ctx != null)
+                {
+                    var setting = ctx.AppSettings.AsNoTracking().FirstOrDefault(s => s.Key == SettingKeyPixKey);
+                    return setting?.Value;
+                }
+            }
+            catch (InvalidOperationException secEx) when (secEx.Message.Contains("[SEGURANÇA DE EXECUÇÃO]", StringComparison.Ordinal))
+            {
+                throw;
+            }
+            catch
+            {
+            }
+            return null;
         }
     }
 }

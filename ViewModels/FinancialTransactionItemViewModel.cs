@@ -52,6 +52,18 @@ namespace CobraPix_PC.ViewModels
         public int? ReferenceYear { get; }
         public string Reference { get; }
 
+        public decimal? OriginalAmount => Transaction.OriginalAmount;
+        public decimal? TotalPaid => Transaction.TotalPaid;
+        public decimal? RemainingBalance => Transaction.RemainingBalance;
+
+        public string FormattedOriginalAmount => OriginalAmount.HasValue ? OriginalAmount.Value.ToString("C2", PtBr) : "-";
+        public string FormattedTotalPaid => TotalPaid.HasValue ? TotalPaid.Value.ToString("C2", PtBr) : "-";
+        public string FormattedRemainingBalance => RemainingBalance.HasValue ? RemainingBalance.Value.ToString("C2", PtBr) : "-";
+
+        public DateTime Date => PaymentDate;
+        public string FormattedMethod => PaymentMethodBadge;
+        public string? Competence => ReferenceMonth.HasValue && ReferenceYear.HasValue ? $"{ReferenceMonth.Value:D2}/{ReferenceYear.Value}" : null;
+
         public string StatusText => "RECEBIDO";
 
         public FinancialTransaction Transaction { get; }

@@ -45,6 +45,12 @@ namespace CobraPix_PC.Models
         public int? ReferenceYear { get; set; }
 
         public string Reference { get; set; } = string.Empty;
+
+        public decimal? OriginalAmount { get; set; }
+
+        public decimal? TotalPaid { get; set; }
+
+        public decimal? RemainingBalance { get; set; }
     }
 
     /// <summary>

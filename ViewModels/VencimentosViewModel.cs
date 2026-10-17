@@ -288,6 +288,8 @@ namespace CobraPix_PC.ViewModels
                     target.ClientName,
                     target.Reference,
                     target.DueDate,
+                    target.OriginalAmount,
+                    target.TotalPaid,
                     target.RemainingBalance);
 
                 WhatsAppPreview.Open(

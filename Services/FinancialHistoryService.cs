@@ -35,6 +35,14 @@ namespace CobraPix_PC.Services
                         .ThenInclude(s => s.Client)
                 .ToListAsync();
 
+            var installmentIds = installmentPayments.Select(p => p.InstallmentId).Distinct().ToList();
+            var totalPaidByInstallment = await _context.InstallmentPayments
+                .AsNoTracking()
+                .Where(p => installmentIds.Contains(p.InstallmentId))
+                .GroupBy(p => p.InstallmentId)
+                .Select(g => new { InstallmentId = g.Key, TotalPaid = g.Sum(x => x.AmountPaid) })
+                .ToDictionaryAsync(x => x.InstallmentId, x => x.TotalPaid);
+
             foreach (var p in installmentPayments)
             {
                 var client = p.Installment?.Sale?.Client;
@@ -47,6 +55,10 @@ namespace CobraPix_PC.Services
                     : "Pagamento de Parcela";
 
                 string reference = p.Installment?.Sale?.Description ?? $"Venda #{p.Installment?.SaleId}";
+
+                decimal origAmount = p.Installment?.Amount ?? p.AmountPaid;
+                decimal totalPaid = totalPaidByInstallment.TryGetValue(p.InstallmentId, out var tp) ? tp : p.AmountPaid;
+                decimal remainingBalance = Math.Max(0m, origAmount - totalPaid);
 
                 list.Add(new FinancialTransaction
                 {
@@ -63,7 +75,10 @@ namespace CobraPix_PC.Services
                     SaleId = p.Installment?.SaleId,
                     InstallmentNumber = p.Installment?.InstallmentNumber,
                     TotalInstallments = p.Installment?.Sale?.InstallmentCount,
-                    Reference = reference
+                    Reference = reference,
+                    OriginalAmount = origAmount,
+                    TotalPaid = totalPaid,
+                    RemainingBalance = remainingBalance
                 });
             }
 
@@ -85,6 +100,10 @@ namespace CobraPix_PC.Services
                     ? m.MonthlyCustomer.Notes!
                     : "Contrato de Mensalista";
 
+                decimal origAmount = m.MonthlyCustomer?.MonthlyAmount ?? m.Amount;
+                decimal totalPaid = m.Amount;
+                decimal remainingBalance = 0m;
+
                 list.Add(new FinancialTransaction
                 {
                     Id = m.Id,
@@ -99,7 +118,10 @@ namespace CobraPix_PC.Services
                     Notes = m.Notes,
                     ReferenceMonth = m.ReferenceMonth,
                     ReferenceYear = m.ReferenceYear,
-                    Reference = refText
+                    Reference = refText,
+                    OriginalAmount = origAmount,
+                    TotalPaid = totalPaid,
+                    RemainingBalance = remainingBalance
                 });
             }
 

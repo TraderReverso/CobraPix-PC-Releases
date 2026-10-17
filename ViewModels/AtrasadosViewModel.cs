@@ -214,8 +214,8 @@ namespace CobraPix_PC.ViewModels
                 if (target == null) return;
 
                 string msg = target.IsParcela
-                    ? _whatsAppService.GenerateParcelaAtrasadaMessage(target.ClientName, target.Reference, target.DueDate, target.RemainingBalance)
-                    : _whatsAppService.GenerateMensalidadeAtrasadaMessage(target.ClientName, target.Reference, target.DueDate, target.RemainingBalance);
+                    ? _whatsAppService.GenerateParcelaAtrasadaMessage(target.ClientName, target.Reference, target.DueDate, target.OriginalAmount, target.TotalPaid, target.RemainingBalance)
+                    : _whatsAppService.GenerateMensalidadeAtrasadaMessage(target.ClientName, target.Reference, target.DueDate, target.OriginalAmount, target.TotalPaid, target.RemainingBalance);
 
                 WhatsAppPreview.Open(target.ClientName, target.ClientPhone, target.TipoBadge, target.FormattedRemainingBalance, msg);
             });

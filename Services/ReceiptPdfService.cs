@@ -4,6 +4,9 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using CobraPix_PC.Data;
 using CobraPix_PC.Models;
 using CobraPix_PC.Services.Interfaces;
 using PdfSharp;
@@ -72,6 +75,8 @@ namespace CobraPix_PC.Services
     {
         private static readonly CultureInfo PtBr = new("pt-BR");
 
+        public string? CompanyName { get; set; }
+
         static ReceiptPdfService()
         {
             try
@@ -87,13 +92,85 @@ namespace CobraPix_PC.Services
             }
         }
 
-        public byte[] GenerateReceiptBytes(FinancialTransaction transaction)
+        public const string ReceiptsDirectoryEnvVar = "COBRAPIX_RECEIPTS_DIRECTORY";
+
+        private readonly CobraPixDbContext? _dbContext;
+
+        public ReceiptPdfService()
+        {
+        }
+
+        public ReceiptPdfService(CobraPixDbContext dbContext)
+        {
+            _dbContext = dbContext;
+        }
+
+        public ReceiptPdfService(string? companyName)
+        {
+            CompanyName = companyName;
+        }
+
+        private string? ResolveCompanyName(string? explicitName)
+        {
+            if (!string.IsNullOrWhiteSpace(explicitName))
+                return explicitName.Trim();
+
+            if (!string.IsNullOrWhiteSpace(CompanyName))
+                return CompanyName.Trim();
+
+            if (_dbContext != null)
+            {
+                try
+                {
+                    var setting = _dbContext.AppSettings.AsNoTracking()
+                        .FirstOrDefault(s => s.Key == "App.CompanyName" || s.Key == "App.IssuerName");
+                    if (!string.IsNullOrWhiteSpace(setting?.Value))
+                        return setting.Value.Trim();
+                }
+                catch (InvalidOperationException secEx) when (secEx.Message.Contains("[SEGURANÇA DE EXECUÇÃO]", StringComparison.Ordinal))
+                {
+                    throw;
+                }
+                catch { }
+
+                // Contexto explícito injetado: nunca faz fallback implícito para App.Services
+                return null;
+            }
+
+            try
+            {
+                using var scope = App.Services?.CreateScope();
+                var ctx = scope?.ServiceProvider.GetService<CobraPixDbContext>();
+                if (ctx != null)
+                {
+                    var setting = ctx.AppSettings.AsNoTracking()
+                        .FirstOrDefault(s => s.Key == "App.CompanyName" || s.Key == "App.IssuerName");
+                    if (!string.IsNullOrWhiteSpace(setting?.Value))
+                        return setting.Value.Trim();
+                }
+            }
+            catch (InvalidOperationException secEx) when (secEx.Message.Contains("[SEGURANÇA DE EXECUÇÃO]", StringComparison.Ordinal))
+            {
+                throw;
+            }
+            catch
+            {
+            }
+
+            return null;
+        }
+
+        public byte[] GenerateReceiptBytes(FinancialTransaction transaction) => GenerateReceiptBytes(transaction, null);
+
+        public byte[] GenerateReceiptBytes(FinancialTransaction transaction, string? companyName = null)
         {
             if (transaction == null) throw new ArgumentNullException(nameof(transaction));
 
+            string? effectiveCompany = ResolveCompanyName(companyName);
+
             using var document = new PdfDocument();
             document.Info.Title = $"Comprovante - {transaction.ClientName}";
-            document.Info.Author = "CobraPix PC";
+            document.Info.Author = !string.IsNullOrWhiteSpace(effectiveCompany) ? effectiveCompany : "CobraPix PC";
             document.Info.Subject = "Comprovante de Pagamento";
 
             var page = document.AddPage();
@@ -102,7 +179,7 @@ namespace CobraPix_PC.Services
 
             using (var gfx = XGraphics.FromPdfPage(page))
             {
-                DrawReceipt(gfx, transaction, page.Width.Point, page.Height.Point);
+                DrawReceipt(gfx, transaction, page.Width.Point, page.Height.Point, effectiveCompany);
             }
 
             using var ms = new MemoryStream();
@@ -110,20 +187,98 @@ namespace CobraPix_PC.Services
             return ms.ToArray();
         }
 
-        public string GenerateAndSaveReceipt(FinancialTransaction transaction, string destinationPath)
+        public string GenerateAndSaveReceipt(FinancialTransaction transaction, string destinationPath) =>
+            GenerateAndSaveReceipt(transaction, destinationPath, null);
+
+        public string GenerateAndSaveReceipt(FinancialTransaction transaction, string destinationPath, string? companyName = null)
         {
             if (transaction == null) throw new ArgumentNullException(nameof(transaction));
             if (string.IsNullOrWhiteSpace(destinationPath)) throw new ArgumentException("Caminho de destino não pode ser vazio.", nameof(destinationPath));
 
-            string? dir = Path.GetDirectoryName(destinationPath);
-            if (!string.IsNullOrWhiteSpace(dir) && !Directory.Exists(dir))
+            string validatedPath = DatabasePath.IsTestExecutionMode()
+                ? DatabasePath.AssertSafeTestFilePath(destinationPath, "Gravação de recibo PDF")
+                : Path.GetFullPath(destinationPath.Trim());
+
+            string? dir = Path.GetDirectoryName(validatedPath);
+            if (!string.IsNullOrWhiteSpace(dir))
             {
-                Directory.CreateDirectory(dir);
+                if (DatabasePath.IsTestExecutionMode())
+                {
+                    DatabasePath.AssertSafeTestDirectoryPath(dir, "Diretório de recibos PDF");
+                }
+
+                if (!Directory.Exists(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
             }
 
-            byte[] bytes = GenerateReceiptBytes(transaction);
-            File.WriteAllBytes(destinationPath, bytes);
-            return Path.GetFullPath(destinationPath);
+            byte[] bytes = GenerateReceiptBytes(transaction, companyName);
+            File.WriteAllBytes(validatedPath, bytes);
+            return validatedPath;
+        }
+
+        public string GetReceiptsDirectory()
+        {
+            if (DatabasePath.IsTestExecutionMode())
+            {
+                string? envReceiptsDir = Environment.GetEnvironmentVariable(ReceiptsDirectoryEnvVar);
+                string targetDir;
+
+                if (!string.IsNullOrWhiteSpace(envReceiptsDir))
+                {
+                    targetDir = envReceiptsDir.Trim();
+                }
+                else
+                {
+                    string validatedDbPath = DatabasePath.GetDatabaseFilePath();
+                    string dbDir = Path.GetDirectoryName(validatedDbPath)
+                        ?? throw new InvalidOperationException("[SEGURANÇA DE EXECUÇÃO] Não foi possível determinar o diretório da base de teste para recibos.");
+                    targetDir = Path.Combine(dbDir, "receipts");
+                }
+
+                return DatabasePath.AssertSafeTestDirectoryPath(targetDir, "Diretório de recibos PDF");
+            }
+
+            return Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "CobraPix",
+                "receipts");
+        }
+
+        public string GetDefaultReceiptPath(FinancialTransaction transaction)
+        {
+            if (transaction == null) throw new ArgumentNullException(nameof(transaction));
+
+            string receiptsDir = GetReceiptsDirectory();
+            string fileName = GetSuggestedFileName(transaction);
+            string fullReceiptPath = Path.Combine(receiptsDir, fileName);
+
+            if (DatabasePath.IsTestExecutionMode())
+            {
+                fullReceiptPath = DatabasePath.AssertSafeTestFilePath(fullReceiptPath, "Resolução de caminho padrão de recibo PDF");
+            }
+
+            if (!Directory.Exists(receiptsDir))
+            {
+                Directory.CreateDirectory(receiptsDir);
+            }
+
+            return fullReceiptPath;
+        }
+
+        public string ViewOrGenerateReceipt(FinancialTransaction transaction, string? companyName = null)
+        {
+            if (transaction == null) throw new ArgumentNullException(nameof(transaction));
+
+            string defaultPath = GetDefaultReceiptPath(transaction);
+            if (!File.Exists(defaultPath))
+            {
+                GenerateAndSaveReceipt(transaction, defaultPath, companyName);
+            }
+
+            OpenPdf(defaultPath);
+            return defaultPath;
         }
 
         public string GetSuggestedFileName(FinancialTransaction transaction)
@@ -139,6 +294,12 @@ namespace CobraPix_PC.Services
 
         public bool OpenPdf(string filePath)
         {
+            if (DatabasePath.IsTestExecutionMode())
+            {
+                string validated = DatabasePath.AssertSafeTestFilePath(filePath, "Abertura de recibo PDF");
+                return File.Exists(validated);
+            }
+
             try
             {
                 if (!File.Exists(filePath)) return false;
@@ -157,15 +318,18 @@ namespace CobraPix_PC.Services
             }
         }
 
-        private static void DrawReceipt(XGraphics gfx, FinancialTransaction transaction, double pageWidth, double pageHeight)
+        private static void DrawReceipt(XGraphics gfx, FinancialTransaction transaction, double pageWidth, double pageHeight, string? companyName)
         {
             double marginLeft = 40;
             double marginRight = 40;
             double contentWidth = pageWidth - marginLeft - marginRight;
 
+            bool hasCompany = !string.IsNullOrWhiteSpace(companyName);
+
             // Paleta de Cores do Documento
             var brushTopBar = new XSolidBrush(XColor.FromArgb(124, 58, 237));     // #7C3AED CobraPix Violet
             var brushTitle = new XSolidBrush(XColor.FromArgb(15, 23, 42));       // #0F172A Dark Slate
+            var brushCompany = new XSolidBrush(XColor.FromArgb(71, 85, 105));    // #475569 Slate
             var brushSubtitle = new XSolidBrush(XColor.FromArgb(99, 102, 241));   // #6366F1 Indigo
             var brushLabel = new XSolidBrush(XColor.FromArgb(100, 116, 139));    // #64748B Slate Muted
             var brushValue = new XSolidBrush(XColor.FromArgb(15, 23, 42));       // #0F172A Value Dark
@@ -179,23 +343,38 @@ namespace CobraPix_PC.Services
 
             // Fontes
             var fontTitle = new XFont("Arial", 22, XFontStyleEx.Bold);
+            var fontCompanyHeader = new XFont("Arial", 12, XFontStyleEx.Bold);
             var fontSub = new XFont("Arial", 11, XFontStyleEx.Bold);
             var fontBadge = new XFont("Arial", 9, XFontStyleEx.Bold);
             var fontSection = new XFont("Arial", 10.5, XFontStyleEx.Bold);
             var fontLabel = new XFont("Arial", 8.5, XFontStyleEx.Bold);
-            var fontValue = new XFont("Arial", 10.5, XFontStyleEx.Regular);
-            var fontValueBold = new XFont("Arial", 11, XFontStyleEx.Bold);
+            var fontValue = new XFont("Arial", 10, XFontStyleEx.Regular);
+            var fontValueBold = new XFont("Arial", 10.5, XFontStyleEx.Bold);
             var fontAmountLabel = new XFont("Arial", 9, XFontStyleEx.Bold);
             var fontAmountValue = new XFont("Arial", 24, XFontStyleEx.Bold);
-            var fontNotice = new XFont("Arial", 8.5, XFontStyleEx.Italic);
+            var fontSuccessTitle = new XFont("Arial", 11, XFontStyleEx.Bold);
+            var fontSuccessSub = new XFont("Arial", 9.5, XFontStyleEx.Regular);
+            var fontNotice = new XFont("Arial", 8, XFontStyleEx.Italic);
             var fontFooter = new XFont("Arial", 8.5, XFontStyleEx.Regular);
 
             // 1. Barra superior colorida CobraPix
-            gfx.DrawRectangle(brushTopBar, marginLeft, 36, contentWidth, 5);
+            gfx.DrawRectangle(brushTopBar, marginLeft, 32, contentWidth, 5);
 
             // 2. Cabeçalho
-            gfx.DrawString("COBRAPIX", fontTitle, brushTitle, new XPoint(marginLeft, 72));
-            gfx.DrawString("COMPROVANTE DE PAGAMENTO", fontSub, brushSubtitle, new XPoint(marginLeft, 90));
+            double headerDividerY;
+            if (hasCompany)
+            {
+                gfx.DrawString("COBRAPIX", fontTitle, brushTitle, new XPoint(marginLeft, 64));
+                gfx.DrawString(companyName!, fontCompanyHeader, brushCompany, new XPoint(marginLeft, 82));
+                gfx.DrawString("RECIBO DE PAGAMENTO", fontSub, brushSubtitle, new XPoint(marginLeft, 98));
+                headerDividerY = 110;
+            }
+            else
+            {
+                gfx.DrawString("COBRAPIX", fontTitle, brushTitle, new XPoint(marginLeft, 68));
+                gfx.DrawString("RECIBO DE PAGAMENTO", fontSub, brushSubtitle, new XPoint(marginLeft, 88));
+                headerDividerY = 102;
+            }
 
             // Badge de Tipo de Pagamento (Direita)
             bool isMonthly = transaction.TransactionType == FinancialTransactionType.Monthly;
@@ -203,7 +382,7 @@ namespace CobraPix_PC.Services
             double badgeWidth = 110;
             double badgeHeight = 24;
             double badgeX = marginLeft + contentWidth - badgeWidth;
-            double badgeY = 56;
+            double badgeY = 52;
 
             var brushBadgeBg = isMonthly
                 ? new XSolidBrush(XColor.FromArgb(254, 243, 199)) // Amarelo
@@ -221,22 +400,22 @@ namespace CobraPix_PC.Services
                 new XPoint(badgeX + (badgeWidth - badgeTextSize.Width) / 2, badgeY + 16));
 
             // Linha divisória após cabeçalho
-            gfx.DrawLine(penDivider, marginLeft, 108, marginLeft + contentWidth, 108);
+            gfx.DrawLine(penDivider, marginLeft, headerDividerY, marginLeft + contentWidth, headerDividerY);
 
-            // 3. Card de Destaque: Valor Recebido
-            double cardY = 120;
-            double cardHeight = 74;
+            // 3. Card de Destaque: Valor Recebido / Valor Pago
+            double cardY = headerDividerY + 12;
+            double cardHeight = 68;
             gfx.DrawRoundedRectangle(penAmountBorder, brushAmountBg, marginLeft, cardY, contentWidth, cardHeight, 6, 6);
 
-            gfx.DrawString("VALOR EFETIVAMENTE RECEBIDO", fontAmountLabel, new XSolidBrush(XColor.FromArgb(4, 120, 87)), new XPoint(marginLeft + 16, cardY + 24));
+            gfx.DrawString("VALOR EFETIVAMENTE PAGO", fontAmountLabel, new XSolidBrush(XColor.FromArgb(4, 120, 87)), new XPoint(marginLeft + 16, cardY + 22));
             string formattedAmount = transaction.Amount.ToString("C2", PtBr);
-            gfx.DrawString(formattedAmount, fontAmountValue, brushAmountText, new XPoint(marginLeft + 16, cardY + 56));
+            gfx.DrawString(formattedAmount, fontAmountValue, brushAmountText, new XPoint(marginLeft + 16, cardY + 52));
 
             // Status no lado direito do Card
             double statusPillW = 120;
             double statusPillH = 24;
             double statusPillX = marginLeft + contentWidth - statusPillW - 16;
-            double statusPillY = cardY + 18;
+            double statusPillY = cardY + 16;
             var brushPillBg = new XSolidBrush(XColor.FromArgb(220, 252, 231));
             var penPillBorder = new XPen(XColor.FromArgb(134, 239, 172), 1);
             var brushPillText = new XSolidBrush(XColor.FromArgb(21, 128, 61));
@@ -248,21 +427,21 @@ namespace CobraPix_PC.Services
                 new XPoint(statusPillX + (statusPillW - statusSize.Width) / 2, statusPillY + 16));
 
             // 4. Seção Detalhes da Movimentação
-            double detailsStartY = 216;
-            gfx.DrawString("DETALHES DO RECEBIMENTO", fontSection, brushTitle, new XPoint(marginLeft, detailsStartY));
-            gfx.DrawLine(penDivider, marginLeft, detailsStartY + 6, marginLeft + contentWidth, detailsStartY + 6);
+            double detailsStartY = cardY + cardHeight + 14;
+            gfx.DrawString("DETALHES DO PAGAMENTO", fontSection, brushTitle, new XPoint(marginLeft, detailsStartY));
+            gfx.DrawLine(penDivider, marginLeft, detailsStartY + 5, marginLeft + contentWidth, detailsStartY + 5);
 
             // Container de Detalhes
-            double tableY = detailsStartY + 14;
-            double tableHeight = 270;
+            double tableY = detailsStartY + 12;
+            double tableHeight = 310;
             var brushTableBg = new XSolidBrush(XColor.FromArgb(248, 250, 252)); // #F8FAFC
             gfx.DrawRoundedRectangle(penCardBorder, brushTableBg, marginLeft, tableY, contentWidth, tableHeight, 6, 6);
 
             // Linhas internas com dados reais
-            double currentY = tableY + 22;
+            double currentY = tableY + 20;
             double col1LabelX = marginLeft + 16;
-            double col1ValueX = marginLeft + 130;
-            double rowSpacing = 28;
+            double col1ValueX = marginLeft + 140;
+            double rowSpacing = 24;
 
             // Cliente
             gfx.DrawString("CLIENTE:", fontLabel, brushLabel, new XPoint(col1LabelX, currentY));
@@ -272,7 +451,7 @@ namespace CobraPix_PC.Services
             gfx.DrawString(clientDisplay, fontValueBold, brushValue, new XPoint(col1ValueX, currentY));
             currentY += rowSpacing;
 
-            // Tipo / Operação
+            // Operação
             gfx.DrawString("OPERAÇÃO:", fontLabel, brushLabel, new XPoint(col1LabelX, currentY));
             string operacao = isMonthly ? "Mensalidade Recorrente" : "Pagamento de Parcela";
             gfx.DrawString(operacao, fontValue, brushValue, new XPoint(col1ValueX, currentY));
@@ -284,7 +463,7 @@ namespace CobraPix_PC.Services
             gfx.DrawString(refText, fontValueBold, brushValue, new XPoint(col1ValueX, currentY));
             currentY += rowSpacing;
 
-            // Descritivo / Venda
+            // Contrato / Descritivo de Venda (se aplicável)
             if (!string.IsNullOrWhiteSpace(transaction.Reference) && transaction.Reference != refText)
             {
                 gfx.DrawString("CONTRATO / VENDA:", fontLabel, brushLabel, new XPoint(col1LabelX, currentY));
@@ -292,23 +471,59 @@ namespace CobraPix_PC.Services
                 currentY += rowSpacing;
             }
 
+            // Valor Original (quando aplicável)
+            if (transaction.OriginalAmount.HasValue && transaction.OriginalAmount.Value > 0)
+            {
+                gfx.DrawString("VALOR ORIGINAL:", fontLabel, brushLabel, new XPoint(col1LabelX, currentY));
+                gfx.DrawString(transaction.OriginalAmount.Value.ToString("C2", PtBr), fontValue, brushValue, new XPoint(col1ValueX, currentY));
+                currentY += rowSpacing;
+            }
+
+            // Valor Pago
+            gfx.DrawString("VALOR PAGO:", fontLabel, brushLabel, new XPoint(col1LabelX, currentY));
+            gfx.DrawString(transaction.Amount.ToString("C2", PtBr), fontValueBold, brushValue, new XPoint(col1ValueX, currentY));
+            currentY += rowSpacing;
+
+            // Total Já Pago
+            if (transaction.TotalPaid.HasValue)
+            {
+                gfx.DrawString("TOTAL JÁ PAGO:", fontLabel, brushLabel, new XPoint(col1LabelX, currentY));
+                gfx.DrawString(transaction.TotalPaid.Value.ToString("C2", PtBr), fontValue, brushValue, new XPoint(col1ValueX, currentY));
+                currentY += rowSpacing;
+            }
+
+            // Saldo Restante
+            if (transaction.RemainingBalance.HasValue)
+            {
+                gfx.DrawString("SALDO RESTANTE:", fontLabel, brushLabel, new XPoint(col1LabelX, currentY));
+                var balanceBrush = transaction.RemainingBalance.Value == 0
+                    ? new XSolidBrush(XColor.FromArgb(21, 128, 61))
+                    : brushValue;
+                gfx.DrawString(transaction.RemainingBalance.Value.ToString("C2", PtBr), fontValueBold, balanceBrush, new XPoint(col1ValueX, currentY));
+                currentY += rowSpacing;
+            }
+
             // Forma de Pagamento
-            gfx.DrawString("PAGAMENTO VIA:", fontLabel, brushLabel, new XPoint(col1LabelX, currentY));
+            gfx.DrawString("FORMA DE PAGAMENTO:", fontLabel, brushLabel, new XPoint(col1LabelX, currentY));
             string methodDisplay = transaction.PaymentMethod switch
             {
-                PaymentMethod.Pix => "PIX (Transferência Instantânea)",
-                PaymentMethod.Cash => "DINHEIRO (Espécie)",
-                PaymentMethod.Card => "CARTÃO DE CRÉDITO / DÉBITO",
-                PaymentMethod.Other => "OUTRO",
-                _ => "NÃO INFORMADO"
+                PaymentMethod.Pix => "Pix (Transferência Instantânea)",
+                PaymentMethod.Cash => "Dinheiro (Espécie)",
+                PaymentMethod.Card => "Cartão de Crédito / Débito",
+                PaymentMethod.Other => "Outro",
+                _ => "Não informado"
             };
             gfx.DrawString(methodDisplay, fontValueBold, brushValue, new XPoint(col1ValueX, currentY));
             currentY += rowSpacing;
 
-            // Data e Hora do Pagamento (Reais)
-            gfx.DrawString("DATA E HORA:", fontLabel, brushLabel, new XPoint(col1LabelX, currentY));
-            string formattedDate = transaction.PaymentDate.ToString("dd/MM/yyyy 'às' HH:mm", PtBr);
-            gfx.DrawString(formattedDate, fontValue, brushValue, new XPoint(col1ValueX, currentY));
+            // Data do Pagamento
+            gfx.DrawString("DATA DO PAGAMENTO:", fontLabel, brushLabel, new XPoint(col1LabelX, currentY));
+            gfx.DrawString(transaction.PaymentDate.ToString("dd/MM/yyyy", PtBr), fontValue, brushValue, new XPoint(col1ValueX, currentY));
+            currentY += rowSpacing;
+
+            // Hora do Pagamento
+            gfx.DrawString("HORA DO PAGAMENTO:", fontLabel, brushLabel, new XPoint(col1LabelX, currentY));
+            gfx.DrawString(transaction.PaymentDate.ToString("HH:mm", PtBr), fontValue, brushValue, new XPoint(col1ValueX, currentY));
             currentY += rowSpacing;
 
             // Observações (se houver)
@@ -319,27 +534,34 @@ namespace CobraPix_PC.Services
                 currentY += rowSpacing;
             }
 
-            // ID do Registro
-            gfx.DrawString("ID REGISTRO:", fontLabel, brushLabel, new XPoint(col1LabelX, currentY));
+            // ID do Documento / Registro
+            gfx.DrawString("IDENTIFICAÇÃO:", fontLabel, brushLabel, new XPoint(col1LabelX, currentY));
             string idTransacao = $"CPX-{(isMonthly ? "MTH" : "PAR")}-{transaction.Id:D6}";
             gfx.DrawString(idTransacao, fontValue, brushLabel, new XPoint(col1ValueX, currentY));
 
-            // 5. Termo de Autenticidade e Quitação
-            double noticeY = tableY + tableHeight + 20;
-            double noticeH = 50;
-            var brushNoticeBg = new XSolidBrush(XColor.FromArgb(241, 245, 249)); // #F1F5F9
-            gfx.DrawRoundedRectangle(penCardBorder, brushNoticeBg, marginLeft, noticeY, contentWidth, noticeH, 6, 6);
+            // 5. Termo de Confirmação e Quitação
+            double noticeY = tableY + tableHeight + 14;
+            double noticeH = 68;
+            var brushNoticeBg = new XSolidBrush(XColor.FromArgb(240, 253, 244)); // Emerald light
+            var penNoticeBorder = new XPen(XColor.FromArgb(187, 247, 208), 1);   // Emerald light border
+            gfx.DrawRoundedRectangle(penNoticeBorder, brushNoticeBg, marginLeft, noticeY, contentWidth, noticeH, 6, 6);
 
-            string notice1 = "Este comprovante comprova o recebimento do valor especificado acima no sistema CobraPix PC.";
-            string notice2 = "Documento emitido eletronicamente para fins de comprovação e registro contábil entre as partes.";
-            gfx.DrawString(notice1, fontNotice, brushLabel, new XPoint(marginLeft + 12, noticeY + 20));
-            gfx.DrawString(notice2, fontNotice, brushLabel, new XPoint(marginLeft + 12, noticeY + 36));
+            string confirmTitle = "PAGAMENTO EFETUADO COM SUCESSO!";
+            string confirmSub = "Obrigado pelo pagamento.";
+            string noticeText = "Este comprovante comprova o recebimento do valor especificado acima no sistema CobraPix PC para fins contábeis.";
+
+            var brushSuccessDark = new XSolidBrush(XColor.FromArgb(6, 95, 70));
+            gfx.DrawString(confirmTitle, fontSuccessTitle, brushSuccessDark, new XPoint(marginLeft + 16, noticeY + 20));
+            gfx.DrawString(confirmSub, fontSuccessSub, brushTitle, new XPoint(marginLeft + 16, noticeY + 38));
+            gfx.DrawString(noticeText, fontNotice, brushLabel, new XPoint(marginLeft + 16, noticeY + 54));
 
             // 6. Rodapé
-            double footerY = pageHeight - 40;
-            gfx.DrawLine(penDivider, marginLeft, footerY - 14, marginLeft + contentWidth, footerY - 14);
+            double footerY = pageHeight - 36;
+            gfx.DrawLine(penDivider, marginLeft, footerY - 12, marginLeft + contentWidth, footerY - 12);
 
-            gfx.DrawString("CobraPix PC · Gestão Financeira e Cobranças", fontFooter, brushFooter, new XPoint(marginLeft, footerY));
+            string footerBrand = hasCompany ? $"{companyName} · CobraPix PC" : "CobraPix PC · Gestão Financeira e Cobranças";
+            gfx.DrawString(footerBrand, fontFooter, brushFooter, new XPoint(marginLeft, footerY));
+
             string emissionTime = $"Emitido em {DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss", PtBr)}";
             var emissionSize = gfx.MeasureString(emissionTime, fontFooter);
             gfx.DrawString(emissionTime, fontFooter, brushFooter,
@@ -360,7 +582,7 @@ namespace CobraPix_PC.Services
             {
                 if (transaction.InstallmentNumber.HasValue && transaction.TotalInstallments.HasValue)
                 {
-                    return $"Parcela {transaction.InstallmentNumber.Value} de {transaction.TotalInstallments.Value}";
+                    return $"Parcela {transaction.InstallmentNumber.Value}/{transaction.TotalInstallments.Value}";
                 }
                 if (transaction.InstallmentNumber.HasValue)
                 {

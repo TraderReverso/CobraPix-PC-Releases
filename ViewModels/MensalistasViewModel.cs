@@ -443,6 +443,8 @@ namespace CobraPix_PC.ViewModels
                     customer.ClientName,
                     refMes,
                     dueDate,
+                    customer.MonthlyAmount,
+                    0m,
                     customer.MonthlyAmount);
             }
             else if (customer.IsCurrentMonthPending)
@@ -451,6 +453,8 @@ namespace CobraPix_PC.ViewModels
                     customer.ClientName,
                     $"Mensalidade {refMes}",
                     dueDate,
+                    customer.MonthlyAmount,
+                    0m,
                     customer.MonthlyAmount);
             }
             else
