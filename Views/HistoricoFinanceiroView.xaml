@@ -41,45 +41,72 @@
                            Margin="0,4,0,0" />
             </StackPanel>
 
-            <!-- Seletor de Mês/Ano estilo CashFlow Android -->
-            <Border Grid.Column="1"
-                    Background="{DynamicResource CardDarkBrush}"
-                    BorderBrush="{DynamicResource BorderDarkBrush}"
-                    BorderThickness="1"
-                    CornerRadius="8"
-                    Padding="12,6"
-                    VerticalAlignment="Center">
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Command="{Binding PreviousMonthCommand}"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            Foreground="{DynamicResource AccentBrush}"
-                            FontSize="14"
-                            FontWeight="Bold"
-                            Padding="8,4"
-                            Cursor="Hand"
-                            ToolTip="Mês Anterior"
-                            Content="◀" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <!-- Botão Exportar CSV -->
+                <Button Command="{Binding ExportCsvCommand}"
+                        Style="{StaticResource ActionSecondaryButtonStyle}"
+                        Margin="0,0,8,0"
+                        Padding="10,6"
+                        FontSize="11"
+                        ToolTip="Exportar relatório filtrado para arquivo CSV">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="📄" Margin="0,0,5,0" />
+                        <TextBlock Text="Exportar CSV" FontWeight="SemiBold" />
+                    </StackPanel>
+                </Button>
 
-                    <TextBlock Text="{Binding MonthYearDisplayName}"
-                               FontSize="14"
-                               FontWeight="Bold"
-                               Foreground="{DynamicResource TextPrimaryBrush}"
-                               VerticalAlignment="Center"
-                               Margin="12,0" />
+                <!-- Botão Exportar Excel -->
+                <Button Command="{Binding ExportExcelCommand}"
+                        Style="{StaticResource ActionSecondaryButtonStyle}"
+                        Margin="0,0,12,0"
+                        Padding="10,6"
+                        FontSize="11"
+                        ToolTip="Exportar relatório formatado em planilha Excel (.xlsx)">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="📊" Margin="0,0,5,0" />
+                        <TextBlock Text="Exportar Excel" FontWeight="SemiBold" />
+                    </StackPanel>
+                </Button>
 
-                    <Button Command="{Binding NextMonthCommand}"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            Foreground="{DynamicResource AccentBrush}"
-                            FontSize="14"
-                            FontWeight="Bold"
-                            Padding="8,4"
-                            Cursor="Hand"
-                            ToolTip="Próximo Mês"
-                            Content="▶" />
-                </StackPanel>
-            </Border>
+                <!-- Seletor de Mês/Ano estilo CashFlow Android -->
+                <Border Background="{DynamicResource CardDarkBrush}"
+                        BorderBrush="{DynamicResource BorderDarkBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="12,6"
+                        VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Command="{Binding PreviousMonthCommand}"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Foreground="{DynamicResource AccentBrush}"
+                                FontSize="14"
+                                FontWeight="Bold"
+                                Padding="8,4"
+                                Cursor="Hand"
+                                ToolTip="Mês Anterior"
+                                Content="◀" />
+
+                        <TextBlock Text="{Binding MonthYearDisplayName}"
+                                   FontSize="14"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource TextPrimaryBrush}"
+                                   VerticalAlignment="Center"
+                                   Margin="12,0" />
+
+                        <Button Command="{Binding NextMonthCommand}"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Foreground="{DynamicResource AccentBrush}"
+                                FontSize="14"
+                                FontWeight="Bold"
+                                Padding="8,4"
+                                Cursor="Hand"
+                                ToolTip="Próximo Mês"
+                                Content="▶" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
         </Grid>
 
         <!-- ======================================================== -->
@@ -855,7 +882,7 @@
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
 
-                        <!-- 3. Tipo (Parcela vs Mensalidade) -->
+                        <!-- 3. Tipo (Parcela vs Mensalidade vs Estorno) -->
                         <DataGridTemplateColumn Header="TIPO" Width="130">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate DataType="{x:Type vm:FinancialTransactionItemViewModel}">
@@ -866,6 +893,9 @@
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding IsMonthly}" Value="True">
                                                         <Setter Property="Background" Value="#382C15" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding IsRefund}" Value="True">
+                                                        <Setter Property="Background" Value="#381818" />
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
@@ -879,6 +909,9 @@
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding IsMonthly}" Value="True">
                                                             <Setter Property="Foreground" Value="{DynamicResource WarningBrush}" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsRefund}" Value="True">
+                                                            <Setter Property="Foreground" Value="#F87171" />
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
@@ -915,32 +948,67 @@
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
 
-                        <!-- 6. Valor Efetivamente Recebido -->
-                        <DataGridTemplateColumn Header="VALOR RECEBIDO" Width="150">
+                        <!-- 6. Valor Efetivamente Recebido / Estornado -->
+                        <DataGridTemplateColumn Header="VALOR" Width="150">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate DataType="{x:Type vm:FinancialTransactionItemViewModel}">
                                     <TextBlock Text="{Binding FormattedAmount}"
                                                FontSize="13"
                                                FontWeight="Bold"
-                                               Foreground="{DynamicResource SuccessBrush}"
-                                               VerticalAlignment="Center" />
+                                               VerticalAlignment="Center">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsRefund}" Value="True">
+                                                        <Setter Property="Foreground" Value="#F87171" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
 
                         <!-- 7. Status Badge -->
-                        <DataGridTemplateColumn Header="STATUS" Width="100">
+                        <DataGridTemplateColumn Header="STATUS" Width="110">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate DataType="{x:Type vm:FinancialTransactionItemViewModel}">
-                                    <Border Background="#133826"
-                                            CornerRadius="4"
+                                    <Border CornerRadius="4"
                                             Padding="6,2"
                                             HorizontalAlignment="Left"
                                             VerticalAlignment="Center">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="#133826" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsRefund}" Value="True">
+                                                        <Setter Property="Background" Value="#381818" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding IsRefunded}" Value="True">
+                                                        <Setter Property="Background" Value="#381818" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
                                         <TextBlock Text="{Binding StatusText}"
                                                    FontSize="9"
-                                                   FontWeight="Bold"
-                                                   Foreground="{DynamicResource SuccessBrush}" />
+                                                   FontWeight="Bold">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsRefund}" Value="True">
+                                                            <Setter Property="Foreground" Value="#F87171" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsRefunded}" Value="True">
+                                                            <Setter Property="Foreground" Value="#F87171" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
                                     </Border>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
@@ -952,18 +1020,18 @@
                                             Width="160"
                                             Foreground="{DynamicResource TextMutedBrush}" />
 
-                        <!-- 9. Ações Rápidas (Comprovante PDF + WhatsApp) -->
-                        <DataGridTemplateColumn Header="AÇÕES" Width="120">
+                        <!-- 9. Ações Rápidas (Comprovante PDF + Estornar + WhatsApp) -->
+                        <DataGridTemplateColumn Header="AÇÕES" Width="190">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate DataType="{x:Type vm:FinancialTransactionItemViewModel}">
                                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                        <!-- Botão Gerar PDF -->
-                                        <Button Command="{Binding DataContext.GeneratePdfReceiptCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        <!-- Botão Visualizar / Gerar PDF -->
+                                        <Button Command="{Binding DataContext.ViewPdfReceiptCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                 CommandParameter="{Binding}"
                                                 Background="#211933"
                                                 BorderBrush="#7C3AED"
                                                 BorderThickness="1"
-                                                ToolTip="Gerar e salvar comprovante em PDF"
+                                                ToolTip="Visualizar ou gerar comprovante em PDF"
                                                 Cursor="Hand"
                                                 Padding="6,3"
                                                 Margin="0,0,6,0">
@@ -981,6 +1049,43 @@
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBlock Text="📄" FontSize="11" Margin="0,0,3,0" VerticalAlignment="Center" />
                                                 <TextBlock Text="PDF" FontSize="10" FontWeight="Bold" Foreground="#A78BFA" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </Button>
+
+                                        <!-- Botão Estornar Pagamento -->
+                                        <Button Command="{Binding DataContext.OpenRefundDialogCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"
+                                                Background="#2D1515"
+                                                BorderBrush="#DC2626"
+                                                BorderThickness="1"
+                                                ToolTip="Estornar este pagamento (reabrir parcela e registrar estorno rastreável)"
+                                                Cursor="Hand"
+                                                Padding="6,3"
+                                                Margin="0,0,6,0">
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding CanRefund}" Value="False">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}"
+                                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                                            CornerRadius="4"
+                                                            Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="↩" FontSize="11" Margin="0,0,3,0" VerticalAlignment="Center" Foreground="#F87171" />
+                                                <TextBlock Text="Estornar" FontSize="10" FontWeight="Bold" Foreground="#F87171" VerticalAlignment="Center" />
                                             </StackPanel>
                                         </Button>
 
@@ -1253,6 +1358,300 @@
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                 <TextBlock Text="📖" Margin="0,0,6,0" VerticalAlignment="Center" />
                                 <TextBlock Text="ABRIR PDF" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- ======================================================== -->
+        <!-- 6. MODAL OVERLAY: FEEDBACK EXPORTAÇÃO CSV / EXCEL        -->
+        <!-- ======================================================== -->
+        <Grid Grid.RowSpan="4"
+              Margin="-24"
+              Background="#B2000000">
+            <Grid.Style>
+                <Style TargetType="Grid">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsExportFeedbackOpen}" Value="True">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Grid.Style>
+
+            <Border Background="{DynamicResource CardDarkBrush}"
+                    BorderBrush="{DynamicResource BorderDarkBrush}"
+                    BorderThickness="1"
+                    CornerRadius="12"
+                    Width="500"
+                    MaxWidth="560"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Padding="24">
+                <StackPanel>
+                    <Grid Margin="0,0,0,16">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="📊" FontSize="20" Margin="0,0,8,0" />
+                            <TextBlock Text="{Binding ExportFeedbackTitle}"
+                                       FontSize="16"
+                                       FontWeight="Bold"
+                                       Foreground="{DynamicResource TextPrimaryBrush}" />
+                        </StackPanel>
+
+                        <Button Command="{Binding CloseExportFeedbackCommand}"
+                                Content="✕"
+                                FontSize="14"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Foreground="{DynamicResource TextSecondaryBrush}"
+                                HorizontalAlignment="Right"
+                                Cursor="Hand" />
+                    </Grid>
+
+                    <Border Background="{DynamicResource SurfaceBrush}"
+                            BorderBrush="{DynamicResource BorderDarkBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="14"
+                            Margin="0,0,0,18">
+                        <TextBlock Text="{Binding ExportFeedbackMessage}"
+                                   FontSize="13"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   TextWrapping="Wrap"
+                                   LineHeight="20" />
+                    </Border>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Command="{Binding CloseExportFeedbackCommand}"
+                                Content="FECHAR"
+                                Height="36" />
+
+                        <Button Grid.Column="2"
+                                Command="{Binding OpenExportedFileCommand}"
+                                IsEnabled="{Binding CanOpenExportedFile}"
+                                Height="36"
+                                Cursor="Hand">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource PrimaryButtonStyle}">
+                                    <Setter Property="Background" Value="#2563EB" />
+                                </Style>
+                            </Button.Style>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <TextBlock Text="📂" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                <TextBlock Text="ABRIR ARQUIVO" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- ======================================================== -->
+        <!-- 7. MODAL OVERLAY: ESTORNO DE PAGAMENTO                   -->
+        <!-- ======================================================== -->
+        <Grid Grid.RowSpan="4"
+              Margin="-24"
+              Background="#B2000000">
+            <Grid.Style>
+                <Style TargetType="Grid">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsRefundDialogOpen}" Value="True">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Grid.Style>
+
+            <Border Background="{DynamicResource CardDarkBrush}"
+                    BorderBrush="{DynamicResource BorderDarkBrush}"
+                    BorderThickness="1"
+                    CornerRadius="12"
+                    Width="520"
+                    MaxWidth="580"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Padding="24">
+                <StackPanel>
+                    <!-- Cabeçalho do Modal -->
+                    <Grid Margin="0,0,0,16">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="↩" FontSize="20" FontWeight="Bold" Foreground="#F87171" Margin="0,0,8,0" />
+                            <TextBlock Text="Estornar Pagamento"
+                                       FontSize="16"
+                                       FontWeight="Bold"
+                                       Foreground="{DynamicResource TextPrimaryBrush}" />
+                        </StackPanel>
+
+                        <Button Command="{Binding CloseRefundDialogCommand}"
+                                Content="✕"
+                                FontSize="14"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Foreground="{DynamicResource TextSecondaryBrush}"
+                                HorizontalAlignment="Right"
+                                Cursor="Hand" />
+                    </Grid>
+
+                    <!-- Detalhes do Pagamento Selecionado -->
+                    <Border Background="{DynamicResource SurfaceBrush}"
+                            BorderBrush="{DynamicResource BorderDarkBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="14"
+                            Margin="0,0,0,16">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,6">
+                                <TextBlock Text="Cliente:" FontSize="12" Foreground="{DynamicResource TextMutedBrush}" />
+                                <TextBlock Text="{Binding SelectedTransactionForRefund.ClientNameUpper}"
+                                           FontSize="13"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource TextPrimaryBrush}"
+                                           HorizontalAlignment="Right" />
+                            </Grid>
+                            <Grid Margin="0,0,0,6">
+                                <TextBlock Text="Operação:" FontSize="12" Foreground="{DynamicResource TextMutedBrush}" />
+                                <TextBlock Text="{Binding SelectedTransactionForRefund.Description}"
+                                           FontSize="12"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                           HorizontalAlignment="Right" />
+                            </Grid>
+                            <Grid Margin="0,0,0,6">
+                                <TextBlock Text="Data Original:" FontSize="12" Foreground="{DynamicResource TextMutedBrush}" />
+                                <TextBlock Text="{Binding SelectedTransactionForRefund.FormattedDate}"
+                                           FontSize="12"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                           HorizontalAlignment="Right" />
+                            </Grid>
+                            <Grid>
+                                <TextBlock Text="Valor do Pagamento:" FontSize="12" Foreground="{DynamicResource TextMutedBrush}" />
+                                <TextBlock Text="{Binding SelectedTransactionForRefund.FormattedAmount}"
+                                           FontSize="14"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource SuccessBrush}"
+                                           HorizontalAlignment="Right" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Seleção de Modo: Total vs Parcial -->
+                    <StackPanel Margin="0,0,0,14">
+                        <TextBlock Text="Tipo de Estorno:"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   Margin="0,0,0,8" />
+                        <StackPanel Orientation="Horizontal">
+                            <RadioButton Content="Estorno Total (Valor Integral)"
+                                         IsChecked="{Binding IsFullRefund}"
+                                         Foreground="{DynamicResource TextPrimaryBrush}"
+                                         Margin="0,0,16,0"
+                                         GroupName="RefundType" />
+                            <RadioButton Content="Estorno Parcial"
+                                         IsChecked="{Binding IsPartialRefund}"
+                                         Foreground="{DynamicResource TextPrimaryBrush}"
+                                         GroupName="RefundType" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- Campo Valor a Estornar -->
+                    <StackPanel Margin="0,0,0,14">
+                        <TextBlock Text="Valor a Estornar (R$):"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   Margin="0,0,0,4" />
+                        <TextBox Text="{Binding RefundAmountText, UpdateSourceTrigger=PropertyChanged}"
+                                 Style="{StaticResource InputTextBoxStyle}"
+                                 Padding="10,6"
+                                 FontSize="13"
+                                 FontWeight="Bold"
+                                 Foreground="#F87171" />
+                    </StackPanel>
+
+                    <!-- Campo Motivo do Estorno -->
+                    <StackPanel Margin="0,0,0,16">
+                        <TextBlock Text="Motivo / Justificativa:"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   Margin="0,0,0,4" />
+                        <TextBox Text="{Binding RefundReason, UpdateSourceTrigger=PropertyChanged}"
+                                 Style="{StaticResource InputTextBoxStyle}"
+                                 Padding="10,6"
+                                 FontSize="12" />
+                    </StackPanel>
+
+                    <!-- Alerta e Exigência de Confirmação -->
+                    <Border Background="#2D1515"
+                            BorderBrush="#DC2626"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="12"
+                            Margin="0,0,0,16">
+                        <TextBlock Text="⚠️ Confirmação: Esta ação reabrirá a parcela para pendente ou vencida e atualizará o saldo global devedor do cliente. O estorno ficará registrado no histórico com rastreabilidade completa sem apagar dados anteriores."
+                                   FontSize="11"
+                                   Foreground="#FCA5A5"
+                                   TextWrapping="Wrap"
+                                   LineHeight="16" />
+                    </Border>
+
+                    <!-- Mensagem de Erro (se houver) -->
+                    <TextBlock Text="{Binding RefundErrorMessage}"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               Foreground="#EF4444"
+                               TextWrapping="Wrap"
+                               Margin="0,0,0,12">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasRefundError}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
+                    <!-- Botões de Ação -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Command="{Binding CloseRefundDialogCommand}"
+                                Content="CANCELAR"
+                                Height="36" />
+
+                        <Button Grid.Column="2"
+                                Command="{Binding ConfirmRefundCommand}"
+                                Height="36"
+                                Cursor="Hand">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource PrimaryButtonStyle}">
+                                    <Setter Property="Background" Value="#DC2626" />
+                                </Style>
+                            </Button.Style>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <TextBlock Text="↩" FontWeight="Bold" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                <TextBlock Text="CONFIRMAR ESTORNO" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
                     </Grid>

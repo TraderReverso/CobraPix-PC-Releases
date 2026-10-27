@@ -1222,6 +1222,55 @@
                         </StackPanel>
                     </Grid>
 
+                    <!-- Grid 2 Colunas: Juros Contratuais e Frequência -->
+                    <Grid Margin="0,0,0,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="16" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Taxa de Juros Contratual (%) -->
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="JUROS DO CONTRATO (%)" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4" />
+                            <TextBox Style="{StaticResource InputTextBoxStyle}"
+                                     Text="{Binding FormContractInterestRateText, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+
+                        <!-- Frequência / Recorrência -->
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="FREQUÊNCIA DE COBRANÇA" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4" />
+                            <TextBox Style="{StaticResource InputTextBoxStyle}"
+                                     Text="Mensal (dia fixo do mês)"
+                                     IsReadOnly="True"
+                                     Opacity="0.8" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Painel Informativo de Prévia de Juros (quando taxa informada) -->
+                    <Border Background="{DynamicResource SurfaceBrush}"
+                            BorderBrush="{DynamicResource BorderDarkBrush}"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="12,8"
+                            Margin="0,0,0,14">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasContractInterest}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="Valor final com juros: " FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding FormattedCalculatedFinalMonthlyAmount}" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                            <TextBlock Text="{Binding FormattedCalculatedInterestAmount, StringFormat='(+ {0} de juros)'}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+
                     <!-- Campo Observações -->
                     <TextBlock Text="OBSERVAÇÕES (OPCIONAL)" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4" />
                     <TextBox Style="{StaticResource InputTextBoxStyle}"

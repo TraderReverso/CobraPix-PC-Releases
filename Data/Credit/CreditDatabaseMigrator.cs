@@ -12,7 +12,7 @@ namespace CobraPix_PC.Data.Credit
     /// </summary>
     public static class CreditDatabaseMigrator
     {
-        public const int CurrentCreditSchemaVersion = 1;
+        public const int CurrentCreditSchemaVersion = 3;
 
         public static async Task ApplyCreditMigrationsAsync(CobraPixDbContext dbContext)
         {
@@ -40,9 +40,9 @@ namespace CobraPix_PC.Data.Credit
                 {
                     cmdVerTable.CommandText = @"
                         CREATE TABLE IF NOT EXISTS CreditSchemaVersions (
-                            Version INTEGER PRIMARY KEY NOT NULL,
-                            AppliedAtUtc TEXT NOT NULL,
-                            Description TEXT NOT NULL
+                             Version INTEGER PRIMARY KEY NOT NULL,
+                             AppliedAtUtc TEXT NOT NULL,
+                             Description TEXT NOT NULL
                         );";
                     await cmdVerTable.ExecuteNonQueryAsync();
                 }
@@ -68,6 +68,11 @@ namespace CobraPix_PC.Data.Credit
                 {
                     await ApplyVersion2Async(connection);
                 }
+
+                if (appliedVersion < 3)
+                {
+                    await ApplyVersion3Async(connection);
+                }
             }
             finally
             {
@@ -90,6 +95,8 @@ namespace CobraPix_PC.Data.Credit
                     ClientId INTEGER NOT NULL,
                     ContractNumber TEXT NOT NULL UNIQUE,
                     ContractType INTEGER NOT NULL CHECK(ContractType IN (1, 2)),
+                    Periodicity INTEGER NOT NULL DEFAULT 4 CHECK(Periodicity IN (1, 2, 3, 4, 5)),
+                    CustomIntervalDays INTEGER NULL,
                     Status INTEGER NOT NULL CHECK(Status IN (1, 2, 3, 4, 5)),
                     DisbursedPrincipalCents INTEGER NOT NULL CHECK(DisbursedPrincipalCents > 0),
                     TotalNominalInterestCents INTEGER NOT NULL CHECK(TotalNominalInterestCents >= 0),
@@ -361,6 +368,59 @@ namespace CobraPix_PC.Data.Credit
                 cmd.Transaction = tx;
                 cmd.CommandText = sql;
                 await cmd.ExecuteNonQueryAsync();
+
+                tx.Commit();
+            }
+            catch
+            {
+                tx.Rollback();
+                throw;
+            }
+        }
+
+        private static async Task ApplyVersion3Async(SqliteConnection connection)
+        {
+            using var tx = connection.BeginTransaction();
+            try
+            {
+                // Inspecionar colunas existentes na tabela CreditContracts via PRAGMA table_info
+                var existingCols = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                using (var cmdCols = connection.CreateCommand())
+                {
+                    cmdCols.Transaction = tx;
+                    cmdCols.CommandText = "PRAGMA table_info(CreditContracts);";
+                    using var reader = await cmdCols.ExecuteReaderAsync();
+                    while (await reader.ReadAsync())
+                    {
+                        existingCols.Add(reader.GetString(1)); // coluna 'name'
+                    }
+                }
+
+                if (!existingCols.Contains("Periodicity"))
+                {
+                    using var cmdAddPeriodicity = connection.CreateCommand();
+                    cmdAddPeriodicity.Transaction = tx;
+                    cmdAddPeriodicity.CommandText = "ALTER TABLE CreditContracts ADD COLUMN Periodicity INTEGER NOT NULL DEFAULT 4 CHECK(Periodicity IN (1, 2, 3, 4, 5));";
+                    await cmdAddPeriodicity.ExecuteNonQueryAsync();
+                }
+
+                if (!existingCols.Contains("CustomIntervalDays"))
+                {
+                    using var cmdAddCustomDays = connection.CreateCommand();
+                    cmdAddCustomDays.Transaction = tx;
+                    cmdAddCustomDays.CommandText = "ALTER TABLE CreditContracts ADD COLUMN CustomIntervalDays INTEGER NULL;";
+                    await cmdAddCustomDays.ExecuteNonQueryAsync();
+                }
+
+                // Gravação do versionamento da etapa de periodicidade
+                using (var cmdVer = connection.CreateCommand())
+                {
+                    cmdVer.Transaction = tx;
+                    cmdVer.CommandText = @"
+                        INSERT INTO CreditSchemaVersions (Version, AppliedAtUtc, Description)
+                        VALUES (3, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), 'Add configurable periodicity (Daily, Weekly, Biweekly, Monthly, CustomDays) and CustomIntervalDays to CreditContracts');";
+                    await cmdVer.ExecuteNonQueryAsync();
+                }
 
                 tx.Commit();
             }

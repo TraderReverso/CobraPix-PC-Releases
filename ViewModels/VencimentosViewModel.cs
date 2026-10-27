@@ -288,6 +288,8 @@ namespace CobraPix_PC.ViewModels
                     target.ClientName,
                     target.Reference,
                     target.DueDate,
+                    target.OriginalAmount,
+                    target.TotalPaid,
                     target.RemainingBalance);
 
                 WhatsAppPreview.Open(
@@ -295,7 +297,8 @@ namespace CobraPix_PC.ViewModels
                     target.ClientPhone,
                     target.TipoBadge,
                     target.RemainingBalance,
-                    defaultMsg);
+                    defaultMsg,
+                    _whatsAppService.PixKey);
             });
 
             _ = LoadDataAsync();

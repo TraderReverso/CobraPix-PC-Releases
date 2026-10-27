@@ -9,6 +9,8 @@ namespace CobraPix_PC.Models.Credit.Dtos
         public int ClientId { get; set; }
         public string ContractNumber { get; set; } = string.Empty;
         public CreditContractType ContractType { get; set; } = CreditContractType.FixedInstallments;
+        public CreditPeriodicity Periodicity { get; set; } = CreditPeriodicity.Monthly;
+        public int? CustomIntervalDays { get; set; }
         public long PrincipalAmountCents { get; set; }
         public long TotalInterestCents { get; set; }
         public int InstallmentsCount { get; set; }
@@ -19,7 +21,7 @@ namespace CobraPix_PC.Models.Credit.Dtos
 
         public string Canonicalize()
         {
-            return $"{ClientId}|{ContractNumber.Trim()}|{(int)ContractType}|{PrincipalAmountCents}|{TotalInterestCents}|{InstallmentsCount}|{FirstDueDate:yyyy-MM-dd}|{ContractDate:yyyy-MM-dd}|{(Notes ?? string.Empty).Trim()}";
+            return $"{ClientId}|{ContractNumber.Trim()}|{(int)ContractType}|{PrincipalAmountCents}|{TotalInterestCents}|{InstallmentsCount}|{FirstDueDate:yyyy-MM-dd}|{ContractDate:yyyy-MM-dd}|{(int)Periodicity}|{CustomIntervalDays?.ToString() ?? "null"}|{(Notes ?? string.Empty).Trim()}";
         }
     }
 
@@ -28,6 +30,8 @@ namespace CobraPix_PC.Models.Credit.Dtos
         public string ContractId { get; set; } = string.Empty;
         public string ContractNumber { get; set; } = string.Empty;
         public CreditContractStatus Status { get; set; }
+        public CreditPeriodicity Periodicity { get; set; } = CreditPeriodicity.Monthly;
+        public int? CustomIntervalDays { get; set; }
         public long TotalAmountCents { get; set; }
         public int InstallmentsGenerated { get; set; }
     }

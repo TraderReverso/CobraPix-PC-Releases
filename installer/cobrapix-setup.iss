@@ -1,10 +1,10 @@
 ; =====================================================================
-; Script Inno Setup 6 oficial para Instalador Inicial do CobraPix PC
-; Versão: 1.0.3 (x64)
+; Script Inno Setup 6 oficial para Instalador do CobraPix PC
+; Versão: 1.0.7 (x64)
 ; =====================================================================
 
 #define MyAppName "CobraPix PC"
-#define MyAppVersion "1.0.3"
+#define MyAppVersion "1.0.7"
 #define MyAppPublisher "Trader Reverso"
 #define MyAppURL "https://github.com/TraderReverso/CobraPix-PC-Releases"
 #define MyAppExeName "CobraPix PC.exe"
@@ -31,8 +31,8 @@ PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=commandline dialog
 
 ; Saída do Instalador
-OutputDir=..\artifacts\package\1.0.3
-OutputBaseFilename=CobraPix PC Setup 1.0.3
+OutputDir=..\artifacts\package\1.0.7
+OutputBaseFilename=CobraPix PC Setup 1.0.7
 SetupIconFile=..\Assets\app_icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
@@ -54,8 +54,8 @@ Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortugue
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-; Binários publicados da versão 1.0.3 (exclusão estrita de bancos, backups, PDBs e arquivos de teste)
-Source: "..\artifacts\publish\1.0.3\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.db,*.db-wal,*.db-shm,*.sqlite,*.sqlite3,*.cpb,*.bak,*.pdb,test_*,version_info.txt,*.ps1,manifest_test*.json"
+; Binários publicados da versão 1.0.7 (exclusão estrita de bancos, backups, PDBs e arquivos de teste)
+Source: "..\artifacts\publish\1.0.7\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.db,*.db-wal,*.db-shm,*.sqlite,*.sqlite3,*.cpb,*.bak,*.pdb,test_*,version_info.txt,*.ps1,manifest_test*.json"
 
 [Icons]
 ; Atalho no Menu Iniciar
@@ -65,9 +65,7 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilen
 
 [Run]
 ; Inicialização da aplicação ao término da instalação / atualização
-; Em modo silencioso (/VERYSILENT durante atualização comercial), inicia automaticamente a nova versão
 Filename: "{app}\{#MyAppExeName}"; Flags: nowait; Check: WizardSilent
-; Em modo interativo com assistente, exibe a opção na página de conclusão
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent; Check: not WizardSilent
 
 ; NOTA DE SEGURANÇA ABSOLUTA:

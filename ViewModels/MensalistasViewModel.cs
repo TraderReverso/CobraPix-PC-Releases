@@ -73,6 +73,10 @@ namespace CobraPix_PC.ViewModels
         private Client? _selectedFormClient;
         private string _formClientNameText = string.Empty;
         private string _formMonthlyAmountText = string.Empty;
+        private double _formContractInterestRate = 0.0;
+        private string _formContractInterestRateText = "0";
+        private decimal _calculatedInterestAmount;
+        private decimal _calculatedFinalMonthlyAmount;
         private int _formDueDay = 5;
         private DateTime _formStartDate = DateTime.Today;
         private string? _formNotes;
@@ -331,7 +335,94 @@ namespace CobraPix_PC.ViewModels
         public string FormMonthlyAmountText
         {
             get => _formMonthlyAmountText;
-            set => SetProperty(ref _formMonthlyAmountText, value);
+            set
+            {
+                if (SetProperty(ref _formMonthlyAmountText, value))
+                {
+                    UpdateCalculatedAmounts();
+                }
+            }
+        }
+
+        public double FormContractInterestRate
+        {
+            get => _formContractInterestRate;
+            set
+            {
+                if (SetProperty(ref _formContractInterestRate, value))
+                {
+                    _formContractInterestRateText = value.ToString(CultureInfo.CurrentCulture);
+                    OnPropertyChanged(nameof(FormContractInterestRateText));
+                    UpdateCalculatedAmounts();
+                }
+            }
+        }
+
+        public string FormContractInterestRateText
+        {
+            get => _formContractInterestRateText;
+            set
+            {
+                if (SetProperty(ref _formContractInterestRateText, value))
+                {
+                    string clean = value?.Replace(',', '.').Trim() ?? "0";
+                    if (double.TryParse(clean, NumberStyles.Any, CultureInfo.InvariantCulture, out double parsed) && parsed >= 0)
+                    {
+                        _formContractInterestRate = parsed;
+                    }
+                    else
+                    {
+                        _formContractInterestRate = 0.0;
+                    }
+                    OnPropertyChanged(nameof(FormContractInterestRate));
+                    UpdateCalculatedAmounts();
+                }
+            }
+        }
+
+        public decimal CalculatedInterestAmount
+        {
+            get => _calculatedInterestAmount;
+            private set => SetProperty(ref _calculatedInterestAmount, value);
+        }
+
+        public decimal CalculatedFinalMonthlyAmount
+        {
+            get => _calculatedFinalMonthlyAmount;
+            private set => SetProperty(ref _calculatedFinalMonthlyAmount, value);
+        }
+
+        public string FormattedCalculatedInterestAmount => CalculatedInterestAmount.ToString("C2", PtBr);
+        public string FormattedCalculatedFinalMonthlyAmount => CalculatedFinalMonthlyAmount.ToString("C2", PtBr);
+        public bool HasContractInterest => FormContractInterestRate > 0;
+
+        private void UpdateCalculatedAmounts()
+        {
+            string cleanAmount = FormMonthlyAmountText?.Trim() ?? string.Empty;
+            decimal baseAmount = 0m;
+            if (decimal.TryParse(cleanAmount, NumberStyles.Number | NumberStyles.AllowCurrencySymbol, PtBr, out decimal val) ||
+                decimal.TryParse(cleanAmount, NumberStyles.Number, CultureInfo.InvariantCulture, out val))
+            {
+                baseAmount = val;
+            }
+
+            if (baseAmount > 0 && FormContractInterestRate > 0)
+            {
+                var calc = PaymentLogic.CalculateMonthlyContractInterest(baseAmount, FormContractInterestRate);
+                CalculatedInterestAmount = calc.interestAmount;
+                CalculatedFinalMonthlyAmount = calc.finalMonthlyValue;
+            }
+            else
+            {
+                CalculatedInterestAmount = 0m;
+                CalculatedFinalMonthlyAmount = baseAmount;
+            }
+
+            OnPropertyChanged(nameof(CalculatedInterestAmount));
+            OnPropertyChanged(nameof(CalculatedFinalMonthlyAmount));
+            OnPropertyChanged(nameof(FormattedCalculatedInterestAmount));
+            OnPropertyChanged(nameof(FormattedCalculatedFinalMonthlyAmount));
+            OnPropertyChanged(nameof(HasContractInterest));
         }
 
         public int FormDueDay
@@ -443,6 +534,8 @@ namespace CobraPix_PC.ViewModels
                     customer.ClientName,
                     refMes,
                     dueDate,
+                    customer.MonthlyAmount,
+                    0m,
                     customer.MonthlyAmount);
             }
             else if (customer.IsCurrentMonthPending)
@@ -451,6 +544,8 @@ namespace CobraPix_PC.ViewModels
                     customer.ClientName,
                     $"Mensalidade {refMes}",
                     dueDate,
+                    customer.MonthlyAmount,
+                    0m,
                     customer.MonthlyAmount);
             }
             else
@@ -715,9 +810,12 @@ namespace CobraPix_PC.ViewModels
                 SelectedFormClient = ActiveClients.FirstOrDefault();
                 FormClientNameText = string.Empty;
                 FormMonthlyAmountText = string.Empty;
+                FormContractInterestRate = 0.0;
+                FormContractInterestRateText = "0";
                 FormDueDay = 5;
                 FormStartDate = DateTime.Today;
                 FormNotes = string.Empty;
+                UpdateCalculatedAmounts();
 
                 IsFormOpen = true;
             }
@@ -737,10 +835,18 @@ namespace CobraPix_PC.ViewModels
             FormErrorMessage = null;
 
             FormClientNameText = SelectedMonthlyCustomer.ClientName;
-            FormMonthlyAmountText = SelectedMonthlyCustomer.MonthlyAmount.ToString("N2", PtBr);
+            decimal baseAmount = SelectedMonthlyCustomer.OriginalMonthlyAmount > 0 
+                ? SelectedMonthlyCustomer.OriginalMonthlyAmount 
+                : SelectedMonthlyCustomer.MonthlyAmount;
+            FormMonthlyAmountText = baseAmount.ToString("N2", PtBr);
+            FormContractInterestRate = SelectedMonthlyCustomer.ContractInterestRate;
+            FormContractInterestRateText = SelectedMonthlyCustomer.ContractInterestRate > 0 
+                ? SelectedMonthlyCustomer.ContractInterestRate.ToString(CultureInfo.CurrentCulture) 
+                : "0";
             FormDueDay = SelectedMonthlyCustomer.DueDay;
             FormStartDate = SelectedMonthlyCustomer.StartDate;
             FormNotes = SelectedMonthlyCustomer.Notes;
+            UpdateCalculatedAmounts();
 
             IsFormOpen = true;
         }
@@ -803,7 +909,8 @@ namespace CobraPix_PC.ViewModels
                         SelectedMonthlyCustomer.Id,
                         monthlyAmount,
                         FormDueDay,
-                        FormNotes);
+                        FormNotes,
+                        FormContractInterestRate);
 
                     SelectedMonthlyCustomer.UpdateFrom(updated);
                     UpdateCounters();
@@ -816,7 +923,8 @@ namespace CobraPix_PC.ViewModels
                         monthlyAmount,
                         FormDueDay,
                         FormStartDate,
-                        FormNotes);
+                        FormNotes,
+                        FormContractInterestRate);
 
                     await LoadMonthlyCustomersAsync();
                     SelectedMonthlyCustomer = _allCustomers.FirstOrDefault(c => c.Id == created.Id);

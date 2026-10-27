@@ -54,6 +54,7 @@ namespace CobraPix_PC.ViewModels.Modules
         private readonly IFinancialHistoryService _historyService;
         private readonly IWhatsAppService _whatsAppService;
         private readonly IReceiptPdfService _pdfService;
+        private readonly IReportExportService _reportExportService;
         private readonly List<FinancialTransactionItemViewModel> _allTransactions = new();
 
         private bool _isLoading;
@@ -65,6 +66,13 @@ namespace CobraPix_PC.ViewModels.Modules
         private string _generatedPdfPath = string.Empty;
         private string _pdfFeedbackTitle = string.Empty;
         private string _pdfFeedbackMessage = string.Empty;
+
+        // Feedback de Exportação (CSV / Excel)
+        private bool _isExporting;
+        private bool _isExportFeedbackOpen;
+        private string _exportFeedbackTitle = string.Empty;
+        private string _exportFeedbackMessage = string.Empty;
+        private string _exportedFilePath = string.Empty;
 
         // Filtro de Mês/Ano (Navegação Android)
         private int _selectedMonth = DateTime.Today.Month;
@@ -344,6 +352,124 @@ namespace CobraPix_PC.ViewModels.Modules
 
         public bool CanOpenPdf => !string.IsNullOrWhiteSpace(GeneratedPdfPath);
 
+        // Feedback de Exportação
+        public bool IsExporting
+        {
+            get => _isExporting;
+            set => SetProperty(ref _isExporting, value);
+        }
+
+        public bool IsExportFeedbackOpen
+        {
+            get => _isExportFeedbackOpen;
+            set => SetProperty(ref _isExportFeedbackOpen, value);
+        }
+
+        public string ExportFeedbackTitle
+        {
+            get => _exportFeedbackTitle;
+            set => SetProperty(ref _exportFeedbackTitle, value);
+        }
+
+        public string ExportFeedbackMessage
+        {
+            get => _exportFeedbackMessage;
+            set => SetProperty(ref _exportFeedbackMessage, value);
+        }
+
+        public string ExportedFilePath
+        {
+            get => _exportedFilePath;
+            set
+            {
+                if (SetProperty(ref _exportedFilePath, value))
+                {
+                    OnPropertyChanged(nameof(CanOpenExportedFile));
+                }
+            }
+        }
+
+        public bool CanOpenExportedFile => !string.IsNullOrWhiteSpace(ExportedFilePath) && System.IO.File.Exists(ExportedFilePath);
+
+        public Func<string, string, string, string, string?>? SaveFileDialogFunc { get; set; }
+
+        // Estado e Controle de Estorno de Pagamento
+        private readonly IPaymentService _paymentService;
+        private bool _isRefundDialogOpen;
+        private FinancialTransactionItemViewModel? _selectedTransactionForRefund;
+        private string _refundAmountText = string.Empty;
+        private bool _isFullRefund = true;
+        private string _refundReason = "Solicitado pelo cliente";
+        private string? _refundErrorMessage;
+        private bool _isProcessingRefund;
+
+        public bool IsRefundDialogOpen
+        {
+            get => _isRefundDialogOpen;
+            set => SetProperty(ref _isRefundDialogOpen, value);
+        }
+
+        public FinancialTransactionItemViewModel? SelectedTransactionForRefund
+        {
+            get => _selectedTransactionForRefund;
+            set => SetProperty(ref _selectedTransactionForRefund, value);
+        }
+
+        public string RefundAmountText
+        {
+            get => _refundAmountText;
+            set => SetProperty(ref _refundAmountText, value);
+        }
+
+        public bool IsFullRefund
+        {
+            get => _isFullRefund;
+            set
+            {
+                if (SetProperty(ref _isFullRefund, value))
+                {
+                    OnPropertyChanged(nameof(IsPartialRefund));
+                    if (value && SelectedTransactionForRefund != null)
+                    {
+                        decimal available = SelectedTransactionForRefund.Amount - (SelectedTransactionForRefund.RefundedAmount ?? 0m);
+                        RefundAmountText = available.ToString("N2", PtBr);
+                    }
+                }
+            }
+        }
+
+        public bool IsPartialRefund
+        {
+            get => !_isFullRefund;
+            set => IsFullRefund = !value;
+        }
+
+        public string RefundReason
+        {
+            get => _refundReason;
+            set => SetProperty(ref _refundReason, value);
+        }
+
+        public string? RefundErrorMessage
+        {
+            get => _refundErrorMessage;
+            set
+            {
+                if (SetProperty(ref _refundErrorMessage, value))
+                {
+                    OnPropertyChanged(nameof(HasRefundError));
+                }
+            }
+        }
+
+        public bool HasRefundError => !string.IsNullOrWhiteSpace(_refundErrorMessage);
+
+        public bool IsProcessingRefund
+        {
+            get => _isProcessingRefund;
+            set => SetProperty(ref _isProcessingRefund, value);
+        }
+
         // Comandos
         public ICommand LoadTransactionsCommand { get; }
         public ICommand PreviousMonthCommand { get; }
@@ -355,25 +481,39 @@ namespace CobraPix_PC.ViewModels.Modules
         public ICommand ResetFiltersCommand { get; }
         public ICommand OpenWhatsAppReceiptCommand { get; }
         public ICommand GeneratePdfReceiptCommand { get; }
+        public ICommand ViewPdfReceiptCommand { get; }
         public ICommand OpenPdfCommand { get; }
         public ICommand ClosePdfFeedbackCommand { get; }
+        public ICommand ExportCsvCommand { get; }
+        public ICommand ExportExcelCommand { get; }
+        public ICommand OpenExportedFileCommand { get; }
+        public ICommand CloseExportFeedbackCommand { get; }
+        public ICommand OpenRefundDialogCommand { get; }
+        public ICommand ConfirmRefundCommand { get; }
+        public ICommand CloseRefundDialogCommand { get; }
 
         public HistoricoFinanceiroViewModel()
             : this(
                 App.Services?.GetService<IFinancialHistoryService>() ?? new FinancialHistoryService(new CobraPixDbContext()),
                 App.Services?.GetService<IWhatsAppService>() ?? new WhatsAppService(),
-                App.Services?.GetService<IReceiptPdfService>() ?? new ReceiptPdfService())
+                App.Services?.GetService<IReceiptPdfService>() ?? new ReceiptPdfService(),
+                App.Services?.GetService<IReportExportService>() ?? new ReportExportService(),
+                App.Services?.GetService<IPaymentService>() ?? new PaymentService(new CobraPixDbContext()))
         {
         }
 
         public HistoricoFinanceiroViewModel(
             IFinancialHistoryService historyService,
             IWhatsAppService? whatsAppService = null,
-            IReceiptPdfService? pdfService = null)
+            IReceiptPdfService? pdfService = null,
+            IReportExportService? reportExportService = null,
+            IPaymentService? paymentService = null)
         {
             _historyService = historyService ?? throw new ArgumentNullException(nameof(historyService));
             _whatsAppService = whatsAppService ?? App.Services?.GetService<IWhatsAppService>() ?? new WhatsAppService();
             _pdfService = pdfService ?? App.Services?.GetService<IReceiptPdfService>() ?? new ReceiptPdfService();
+            _reportExportService = reportExportService ?? App.Services?.GetService<IReportExportService>() ?? new ReportExportService();
+            _paymentService = paymentService ?? App.Services?.GetService<IPaymentService>() ?? new PaymentService(new CobraPixDbContext());
 
             WhatsAppPreview = new WhatsAppPreviewViewModel(_whatsAppService);
 
@@ -409,8 +549,17 @@ namespace CobraPix_PC.ViewModels.Modules
             ResetFiltersCommand = new RelayCommand(ResetFilters);
             OpenWhatsAppReceiptCommand = new RelayCommand<FinancialTransactionItemViewModel>(OpenWhatsAppReceipt);
             GeneratePdfReceiptCommand = new RelayCommand<FinancialTransactionItemViewModel>(item => GeneratePdfReceipt(item));
+            ViewPdfReceiptCommand = new RelayCommand<FinancialTransactionItemViewModel>(item => ViewOrGeneratePdfReceipt(item));
             OpenPdfCommand = new RelayCommand(OpenGeneratedPdf);
             ClosePdfFeedbackCommand = new RelayCommand(ClosePdfFeedback);
+            ExportCsvCommand = new RelayCommand(async () => await ExportToCsvAsync());
+            ExportExcelCommand = new RelayCommand(async () => await ExportToExcelAsync());
+            OpenExportedFileCommand = new RelayCommand(OpenExportedFile);
+            CloseExportFeedbackCommand = new RelayCommand(CloseExportFeedback);
+
+            OpenRefundDialogCommand = new RelayCommand<FinancialTransactionItemViewModel>(OpenRefundDialog);
+            ConfirmRefundCommand = new RelayCommand(async () => await ConfirmRefundAsync());
+            CloseRefundDialogCommand = new RelayCommand(CloseRefundDialog);
 
             _ = LoadTransactionsAsync();
         }
@@ -652,14 +801,18 @@ namespace CobraPix_PC.ViewModels.Modules
             }
 
             // 5. Atualização de Totais e Contadores
-            TotalReceived = filteredList.Sum(t => t.Amount);
+            decimal totalRec = filteredList.Where(t => !t.IsRefund).Sum(t => t.Amount) - filteredList.Where(t => t.IsRefund).Sum(t => t.Amount);
+            TotalReceived = Math.Max(0m, totalRec);
+
             var instItems = filteredList.Where(t => t.IsInstallment).ToList();
-            InstallmentsTotal = instItems.Sum(t => t.Amount);
-            InstallmentsCount = instItems.Count;
+            decimal instTot = instItems.Where(t => !t.IsRefund).Sum(t => t.Amount) - instItems.Where(t => t.IsRefund).Sum(t => t.Amount);
+            InstallmentsTotal = Math.Max(0m, instTot);
+            InstallmentsCount = instItems.Count(t => !t.IsRefund);
 
             var monthItems = filteredList.Where(t => t.IsMonthly).ToList();
-            MonthlyTotal = monthItems.Sum(t => t.Amount);
-            MonthlyCount = monthItems.Count;
+            decimal mTot = monthItems.Where(t => !t.IsRefund).Sum(t => t.Amount) - monthItems.Where(t => t.IsRefund).Sum(t => t.Amount);
+            MonthlyTotal = Math.Max(0m, mTot);
+            MonthlyCount = monthItems.Count(t => !t.IsRefund);
 
             TotalTransactionsCount = filteredList.Count;
 
@@ -674,7 +827,30 @@ namespace CobraPix_PC.ViewModels.Modules
             string clientName = item.ClientName;
             string? phone = item.ClientPhone;
             string subject = item.IsMonthly ? "⭐ Mensalidade Quitada" : "💰 Parcela Quitada";
-            string msg = $"Olá, {clientName}! Confirmamos o recebimento de {item.FormattedAmount} referente a {item.Description} em {item.FormattedDate}. Agradecemos o pagamento!";
+
+            string msg;
+            if (item.IsMonthly)
+            {
+                msg = _whatsAppService.GeneratePagamentoMensalidadeConfirmadoMessage(
+                    item.ClientName,
+                    item.Competence ?? item.Description,
+                    item.Amount,
+                    item.Date,
+                    totalPaid: item.TotalPaid,
+                    remainingBalance: item.RemainingBalance,
+                    paymentMethod: item.FormattedMethod);
+            }
+            else
+            {
+                msg = _whatsAppService.GeneratePagamentoConfirmadoMessage(
+                    item.ClientName,
+                    item.Description,
+                    item.Amount,
+                    item.Date,
+                    totalPaid: item.TotalPaid,
+                    remainingBalance: item.RemainingBalance,
+                    paymentMethod: item.FormattedMethod);
+            }
 
             WhatsAppPreview.Open(
                 clientName,
@@ -682,6 +858,32 @@ namespace CobraPix_PC.ViewModels.Modules
                 subject,
                 item.Amount,
                 msg);
+        }
+
+        public string? ViewOrGeneratePdfReceipt(FinancialTransactionItemViewModel? item)
+        {
+            if (item == null) return null;
+            return ViewOrGeneratePdfReceiptForTransaction(item.Transaction);
+        }
+
+        public string? ViewOrGeneratePdfReceiptForTransaction(FinancialTransaction transaction)
+        {
+            if (transaction == null) return null;
+
+            try
+            {
+                string path = _pdfService.ViewOrGenerateReceipt(transaction);
+                GeneratedPdfPath = path;
+                return path;
+            }
+            catch (Exception ex)
+            {
+                PdfFeedbackTitle = "Erro ao Visualizar Comprovante";
+                PdfFeedbackMessage = $"Não foi possível abrir o comprovante em PDF: {ex.Message}";
+                GeneratedPdfPath = string.Empty;
+                IsPdfSuccessOpen = true;
+                return null;
+            }
         }
 
         public string? GeneratePdfReceipt(FinancialTransactionItemViewModel? item, string? customDestinationPath = null)
@@ -766,5 +968,238 @@ namespace CobraPix_PC.ViewModels.Modules
             12 => "Dezembro",
             _ => "Mês"
         };
+
+        public string GetCurrentPeriodDescription()
+        {
+            return PeriodPreset switch
+            {
+                HistoryPeriodPreset.Month => MonthYearDisplayName,
+                HistoryPeriodPreset.Today => $"Hoje ({DateTime.Today:dd/MM/yyyy})",
+                HistoryPeriodPreset.Last7Days => $"Últimos 7 dias ({DateTime.Today.AddDays(-7):dd/MM/yyyy} a {DateTime.Today:dd/MM/yyyy})",
+                HistoryPeriodPreset.Last30Days => $"Últimos 30 dias ({DateTime.Today.AddDays(-30):dd/MM/yyyy} a {DateTime.Today:dd/MM/yyyy})",
+                HistoryPeriodPreset.CurrentYear => $"Ano {DateTime.Today.Year}",
+                HistoryPeriodPreset.All => "Todo o Histórico",
+                HistoryPeriodPreset.Custom => $"Personalizado ({CustomStartDate:dd/MM/yyyy} a {CustomEndDate:dd/MM/yyyy})",
+                _ => MonthYearDisplayName
+            };
+        }
+
+        public async Task ExportToCsvAsync()
+        {
+            string defaultName = $"CobraPix_Relatorio_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+            string? targetFile = SaveFileDialogFunc != null
+                ? SaveFileDialogFunc("Exportar Relatório Financeiro (CSV)", "Arquivo CSV (*.csv)|*.csv", ".csv", defaultName)
+                : DefaultSaveFileDialog("Exportar Relatório Financeiro (CSV)", "Arquivo CSV (*.csv)|*.csv", ".csv", defaultName);
+
+            if (string.IsNullOrWhiteSpace(targetFile)) return;
+
+            IsExporting = true;
+            try
+            {
+                var result = await _reportExportService.ExportToCsvAsync(
+                    targetFile,
+                    FilteredTransactions,
+                    GetCurrentPeriodDescription(),
+                    TotalReceived,
+                    InstallmentsTotal,
+                    MonthlyTotal);
+
+                ExportedFilePath = result.FilePath ?? string.Empty;
+                ExportFeedbackTitle = result.Success ? "Exportação Concluída 📄" : "Falha na Exportação";
+                ExportFeedbackMessage = result.Message ?? string.Empty;
+                IsExportFeedbackOpen = true;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLogger.Instance.LogError("HistoricoFinanceiro", ex, "Exportação de CSV falhou");
+                ExportFeedbackTitle = "Erro ao Exportar CSV";
+                ExportFeedbackMessage = "Ocorreu um erro ao exportar os dados: " + ex.Message;
+                ExportedFilePath = string.Empty;
+                IsExportFeedbackOpen = true;
+            }
+            finally
+            {
+                IsExporting = false;
+            }
+        }
+
+        public async Task ExportToExcelAsync()
+        {
+            string defaultName = $"CobraPix_Relatorio_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+            string? targetFile = SaveFileDialogFunc != null
+                ? SaveFileDialogFunc("Exportar Relatório Financeiro (Excel)", "Planilha Excel (*.xlsx)|*.xlsx", ".xlsx", defaultName)
+                : DefaultSaveFileDialog("Exportar Relatório Financeiro (Excel)", "Planilha Excel (*.xlsx)|*.xlsx", ".xlsx", defaultName);
+
+            if (string.IsNullOrWhiteSpace(targetFile)) return;
+
+            IsExporting = true;
+            try
+            {
+                var result = await _reportExportService.ExportToExcelAsync(
+                    targetFile,
+                    FilteredTransactions,
+                    GetCurrentPeriodDescription(),
+                    TotalReceived,
+                    InstallmentsTotal,
+                    MonthlyTotal);
+
+                ExportedFilePath = result.FilePath ?? string.Empty;
+                ExportFeedbackTitle = result.Success ? "Exportação Concluída 📊" : "Falha na Exportação";
+                ExportFeedbackMessage = result.Message ?? string.Empty;
+                IsExportFeedbackOpen = true;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLogger.Instance.LogError("HistoricoFinanceiro", ex, "Exportação de Excel falhou");
+                ExportFeedbackTitle = "Erro ao Exportar Excel";
+                ExportFeedbackMessage = "Ocorreu um erro ao gerar a planilha Excel: " + ex.Message;
+                ExportedFilePath = string.Empty;
+                IsExportFeedbackOpen = true;
+            }
+            finally
+            {
+                IsExporting = false;
+            }
+        }
+
+        private static string? DefaultSaveFileDialog(string title, string filter, string defaultExt, string defaultFileName)
+        {
+            try
+            {
+                var sfd = new Microsoft.Win32.SaveFileDialog
+                {
+                    Title = title,
+                    Filter = filter,
+                    DefaultExt = defaultExt,
+                    FileName = defaultFileName
+                };
+                return sfd.ShowDialog() == true ? sfd.FileName : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        public void OpenExportedFile()
+        {
+            if (CanOpenExportedFile)
+            {
+                try
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = ExportedFilePath,
+                        UseShellExecute = true
+                    });
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLogger.Instance.LogError("HistoricoFinanceiro", ex, "Falha ao abrir arquivo exportado");
+                }
+            }
+            IsExportFeedbackOpen = false;
+        }
+
+        public void CloseExportFeedback()
+        {
+            IsExportFeedbackOpen = false;
+        }
+
+        public void OpenRefundDialog(FinancialTransactionItemViewModel? item)
+        {
+            if (item == null || item.IsRefund || item.IsRefunded) return;
+
+            SelectedTransactionForRefund = item;
+            decimal available = item.Amount - (item.RefundedAmount ?? 0m);
+            RefundAmountText = available.ToString("N2", PtBr);
+            IsFullRefund = true;
+            RefundReason = "Solicitado pelo cliente";
+            RefundErrorMessage = null;
+            IsRefundDialogOpen = true;
+        }
+
+        public async Task ConfirmRefundAsync()
+        {
+            if (SelectedTransactionForRefund == null || IsProcessingRefund) return;
+
+            RefundErrorMessage = null;
+
+            string cleanAmount = (RefundAmountText ?? string.Empty).Replace("R$", "").Trim();
+            if (!decimal.TryParse(cleanAmount, NumberStyles.Currency, PtBr, out decimal amountToRefund) || amountToRefund <= 0m)
+            {
+                RefundErrorMessage = "Informe um valor monetário válido maior que zero para o estorno.";
+                return;
+            }
+
+            decimal maxAvailable = SelectedTransactionForRefund.Amount - (SelectedTransactionForRefund.RefundedAmount ?? 0m);
+            if (amountToRefund > maxAvailable)
+            {
+                RefundErrorMessage = $"O valor do estorno ({amountToRefund:C2}) não pode exceder o saldo disponível ({maxAvailable:C2}).";
+                return;
+            }
+
+            try
+            {
+                IsProcessingRefund = true;
+
+                RefundResult result;
+                if (SelectedTransactionForRefund.IsInstallment)
+                {
+                    result = await _paymentService.RefundInstallmentPaymentAsync(
+                        SelectedTransactionForRefund.Id,
+                        amountToRefund,
+                        RefundReason);
+                }
+                else
+                {
+                    result = await _paymentService.RefundMonthlyPaymentAsync(
+                        SelectedTransactionForRefund.Id,
+                        amountToRefund,
+                        RefundReason);
+                }
+
+                if (!result.Success)
+                {
+                    RefundErrorMessage = result.ErrorMessage ?? "Erro ao processar estorno.";
+                    return;
+                }
+
+                int originalTxId = SelectedTransactionForRefund.Id;
+                IsRefundDialogOpen = false;
+
+                // Recarrega as movimentações e atualiza os totais
+                await LoadTransactionsAsync();
+
+                // Localiza o comprovante de estorno e abre para visualização
+                var refundTx = _allTransactions.FirstOrDefault(t =>
+                    t.IsRefund && t.Transaction.OriginalPaymentId == originalTxId);
+
+                if (refundTx != null)
+                {
+                    ViewOrGeneratePdfReceipt(refundTx);
+                }
+                else
+                {
+                    PdfFeedbackTitle = "Estorno Concluído com Sucesso";
+                    PdfFeedbackMessage = $"O estorno de {amountToRefund.ToString("C2", PtBr)} foi registrado no histórico com rastreabilidade integral. A parcela correspondente foi reaberta e o saldo devedor recalculado.";
+                    IsPdfSuccessOpen = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                RefundErrorMessage = $"Erro inesperado ao realizar estorno: {ex.Message}";
+            }
+            finally
+            {
+                IsProcessingRefund = false;
+            }
+        }
+
+        public void CloseRefundDialog()
+        {
+            IsRefundDialogOpen = false;
+            RefundErrorMessage = null;
+        }
     }
 }

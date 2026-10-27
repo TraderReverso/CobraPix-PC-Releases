@@ -24,10 +24,22 @@ namespace CobraPix_PC.Services
         private readonly IAndroidBackupReader _androidReader;
         private readonly IAndroidImportService _androidImportService;
 
+        internal CobraPixDbContext? DbContext => _context;
+
         private const string SettingKeyLastBackupDate = "Backup.LastBackupDate";
         private const string SettingKeyLastBackupFile = "Backup.LastBackupFile";
         private const string SettingKeyLastRestoreDate = "Backup.LastRestoreDate";
         private const string SettingKeyLastRestoreFile = "Backup.LastRestoreFile";
+
+        public const string SettingKeyAutoBackupEnabled = "Backup.AutoBackupEnabled";
+        public const string SettingKeyLastAutoBackupDate = "Backup.LastAutoBackupDate";
+        public const string SettingKeyLastAutoBackupFile = "Backup.LastAutoBackupFile";
+        public const string SettingKeyLastAutoBackupError = "Backup.LastAutoBackupError";
+
+        public const string BackupDirectoryEnvVar = "COBRAPIX_BACKUP_DIRECTORY";
+        public const string SandboxRootEnvVar = "COBRAPIX_SANDBOX_ROOT";
+
+        private static readonly System.Threading.SemaphoreSlim _autoBackupLock = new(1, 1);
 
         public BackupService(
             CobraPixDbContext? context = null,
@@ -69,7 +81,17 @@ namespace CobraPix_PC.Services
                 return new BackupResult { Success = false, Message = "O caminho de destino do arquivo não foi especificado." };
             }
 
-            string sourceDb = sourceDatabasePath ?? DatabasePath.GetDatabaseFilePath();
+            if (DatabasePath.IsTestExecutionMode())
+            {
+                DatabasePath.AssertSafeTestFilePath(destinationFilePath, "Criação de arquivo de backup");
+                string? destDir = Path.GetDirectoryName(Path.GetFullPath(destinationFilePath.Trim()));
+                if (!string.IsNullOrWhiteSpace(destDir))
+                {
+                    AssertSafeBackupDirectory(destDir);
+                }
+            }
+
+            string sourceDb = DatabasePath.ValidateAndResolveTargetDatabasePath(sourceDatabasePath, "Leitura de banco de origem para backup");
             if (!File.Exists(sourceDb))
             {
                 return new BackupResult { Success = false, Message = $"Banco de dados de origem não foi encontrado: {sourceDb}" };
@@ -361,6 +383,17 @@ namespace CobraPix_PC.Services
 
         public async Task<RestoreResult> RestoreBackupAsync(string backupFilePath, string? targetDatabasePath = null)
         {
+            // 0. Validação estrita do caminho de destino ANTES de abrir, ler, criar diretório ou modificar qualquer arquivo
+            string targetDb = DatabasePath.ValidateAndResolveTargetDatabasePath(targetDatabasePath, "Restauração de backup");
+            if (DatabasePath.IsTestExecutionMode())
+            {
+                string? targetParentDir = Path.GetDirectoryName(targetDb);
+                if (!string.IsNullOrWhiteSpace(targetParentDir))
+                {
+                    AssertSafeBackupDirectory(targetParentDir);
+                }
+            }
+
             if (string.IsNullOrWhiteSpace(backupFilePath) || !File.Exists(backupFilePath))
             {
                 return new RestoreResult { Success = false, Message = "Arquivo de backup não encontrado para restauração." };
@@ -369,7 +402,7 @@ namespace CobraPix_PC.Services
             // Detecta formato: Android JSON real, Android CPBv1 legado ou PC ZIP
             if (_androidImportService.IsAndroidJsonBackup(backupFilePath))
             {
-                var importResult = await _androidImportService.ImportAsync(backupFilePath, targetDatabasePath);
+                var importResult = await _androidImportService.ImportAsync(backupFilePath, targetDb);
                 if (importResult.Success)
                 {
                     await SaveLastRestoreInfoAsync(backupFilePath);
@@ -405,7 +438,6 @@ namespace CobraPix_PC.Services
             }
 
             // Fluxo original PC -> PC (ZIP)
-            string targetDb = targetDatabasePath ?? DatabasePath.GetDatabaseFilePath();
             string? targetDir = Path.GetDirectoryName(targetDb);
             if (!string.IsNullOrEmpty(targetDir) && !Directory.Exists(targetDir))
             {
@@ -552,6 +584,326 @@ namespace CobraPix_PC.Services
                     Value = value,
                     UpdatedAt = DateTime.Now
                 });
+            }
+        }
+
+        /// <summary>
+        /// Valida se o diretório de destino de backup é estritamente seguro e isolado da produção em modo de teste.
+        /// Rejeita colisões textuais e físicas (NTFS junctions, symlinks, aliases de volume) contra a base e pasta de produção,
+        /// e assegura confinamento dentro do sandbox autorizado ou da árvore descartável (fail-closed).
+        /// </summary>
+        public static void AssertSafeBackupDirectory(string targetDir)
+        {
+            if (string.IsNullOrWhiteSpace(targetDir))
+            {
+                throw new ArgumentException("Diretório de destino não pode ser nulo ou vazio.", nameof(targetDir));
+            }
+
+            if (!DatabasePath.IsTestExecutionMode())
+            {
+                return;
+            }
+
+            DatabasePath.AssertSafeTestDirectoryPath(targetDir, "Operação de backup");
+        }
+
+        /// <summary>
+        /// Obtém o diretório para armazenamento dos backups automáticos.
+        /// Em modo de teste, exige diretório configurado via COBRAPIX_BACKUP_DIRECTORY ou derivado
+        /// da base de teste descartável, bloqueando qualquer fallback silencioso ou tentativa de gravação na produção (fail-closed).
+        /// Em produção normal, utiliza a pasta %LOCALAPPDATA%\CobraPix\auto_backups.
+        /// </summary>
+        public string GetAutoBackupDirectory()
+        {
+            if (DatabasePath.IsTestExecutionMode())
+            {
+                string? envBackupDir = Environment.GetEnvironmentVariable(BackupDirectoryEnvVar);
+                string targetDir;
+
+                if (!string.IsNullOrWhiteSpace(envBackupDir))
+                {
+                    targetDir = envBackupDir.Trim();
+                }
+                else
+                {
+                    // Tenta derivar a partir do caminho da base descartável configurada
+                    string? envDbPath = Environment.GetEnvironmentVariable(DatabasePath.DatabasePathEnvVar);
+                    if (string.IsNullOrWhiteSpace(envDbPath))
+                    {
+                        throw new InvalidOperationException(
+                            $"[SEGURANÇA DE EXECUÇÃO] O aplicativo está em modo de teste, mas nenhum diretório de backup foi configurado em {BackupDirectoryEnvVar} nem foi possível derivá-lo de {DatabasePath.DatabasePathEnvVar}.\n" +
+                            "Fallback silencioso para a pasta de produção é estritamente proibido.");
+                    }
+
+                    string validatedDbPath = DatabasePath.AssertSafeTestFilePath(envDbPath, "Derivação de diretório de backup automático");
+                    string dbDirectory = Path.GetDirectoryName(validatedDbPath)
+                        ?? throw new InvalidOperationException("[SEGURANÇA DE EXECUÇÃO] Não foi possível determinar o diretório da base de dados descartável.");
+                    targetDir = Path.Combine(dbDirectory, "auto_backups");
+                }
+
+                // Validação estrita de contenção: bloqueia qualquer colisão textual ou física contra a produção e vazamentos de sandbox
+                AssertSafeBackupDirectory(targetDir);
+                string canonicalTargetDir = Path.GetFullPath(targetDir);
+
+                if (!Directory.Exists(canonicalTargetDir))
+                {
+                    Directory.CreateDirectory(canonicalTargetDir);
+                }
+
+                return canonicalTargetDir;
+            }
+
+            // Modo normal de produção
+            string prodFolder = Path.Combine(DatabasePath.GetDatabaseDirectory(), "auto_backups");
+            if (!Directory.Exists(prodFolder))
+            {
+                Directory.CreateDirectory(prodFolder);
+            }
+            return prodFolder;
+        }
+
+        public async Task<bool> IsAutoBackupEnabledAsync()
+        {
+            if (_context == null) return true; // Ativado por padrão
+            try
+            {
+                var setting = await _context.AppSettings
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(s => s.Key == SettingKeyAutoBackupEnabled);
+
+                if (setting == null || string.IsNullOrWhiteSpace(setting.Value))
+                {
+                    return true; // Ativado por padrão
+                }
+
+                if (bool.TryParse(setting.Value, out bool enabled))
+                {
+                    return enabled;
+                }
+                return true;
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
+        public async Task SetAutoBackupEnabledAsync(bool enabled)
+        {
+            if (_context == null) return;
+            try
+            {
+                await UpsertSettingAsync(SettingKeyAutoBackupEnabled, enabled.ToString());
+                await _context.SaveChangesAsync();
+            }
+            catch { }
+        }
+
+        public async Task<string?> GetLastAutoBackupInfoAsync()
+        {
+            if (_context == null) return null;
+            try
+            {
+                var dateSetting = await _context.AppSettings.AsNoTracking().FirstOrDefaultAsync(s => s.Key == SettingKeyLastAutoBackupDate);
+                var fileSetting = await _context.AppSettings.AsNoTracking().FirstOrDefaultAsync(s => s.Key == SettingKeyLastAutoBackupFile);
+                var errSetting = await _context.AppSettings.AsNoTracking().FirstOrDefaultAsync(s => s.Key == SettingKeyLastAutoBackupError);
+
+                if (!string.IsNullOrWhiteSpace(errSetting?.Value))
+                {
+                    return $"Última tentativa com erro: {errSetting.Value}";
+                }
+
+                if (dateSetting != null && !string.IsNullOrWhiteSpace(dateSetting.Value))
+                {
+                    string fileName = !string.IsNullOrWhiteSpace(fileSetting?.Value)
+                        ? Path.GetFileName(fileSetting.Value)
+                        : "CobraPix_AutoBackup";
+                    return $"Concluído em {dateSetting.Value} ({fileName})";
+                }
+                return null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        public async Task<BackupResult?> CheckAndPerformDailyAutoBackupAsync(string? customSourceDb = null, string? customTargetDir = null, bool force = false)
+        {
+            // Proteção contra concorrência: tenta obter o semáforo imediatamente sem bloquear chamadas simultâneas
+            if (!await _autoBackupLock.WaitAsync(0))
+            {
+                // Outra rotina de backup automático já está em execução no momento
+                return null;
+            }
+
+            try
+            {
+                // 0. Se foi informado um banco de origem explícito, valida imediatamente antes de qualquer operação
+                if (!string.IsNullOrWhiteSpace(customSourceDb))
+                {
+                    DatabasePath.ValidateAndResolveTargetDatabasePath(customSourceDb, "Leitura de banco para backup automático");
+                }
+
+                // 1. Verifica se a funcionalidade está habilitada
+                if (!force)
+                {
+                    bool isEnabled = await IsAutoBackupEnabledAsync();
+                    if (!isEnabled)
+                    {
+                        return null; // Recurso desativado pelo usuário
+                    }
+                }
+
+                // 2. Data de hoje (padrão local yyyy-MM-dd)
+                string todayStr = DateTime.Today.ToString("yyyy-MM-dd");
+
+                // 3. Verifica se já existe um backup válido executado na data de hoje
+                if (!force && _context != null)
+                {
+                    string? lastDate = null;
+                    string? lastFile = null;
+                    try
+                    {
+                        var lastDateSetting = await _context.AppSettings
+                            .AsNoTracking()
+                            .FirstOrDefaultAsync(s => s.Key == SettingKeyLastAutoBackupDate);
+                        lastDate = lastDateSetting?.Value;
+
+                        var lastFileSetting = await _context.AppSettings
+                            .AsNoTracking()
+                            .FirstOrDefaultAsync(s => s.Key == SettingKeyLastAutoBackupFile);
+                        lastFile = lastFileSetting?.Value;
+                    }
+                    catch { }
+
+                    if (string.Equals(lastDate, todayStr, StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Se o registro diz que já executou hoje, verifica se o arquivo físico realmente existe e é íntegro
+                        if (!string.IsNullOrWhiteSpace(lastFile) && File.Exists(lastFile))
+                        {
+                            var validation = ValidateBackupFile(lastFile);
+                            if (validation.IsValid)
+                            {
+                                // Já existe um backup automático 100% íntegro e válido gerado hoje!
+                                return null;
+                            }
+                        }
+                    }
+                }
+
+                // 4. Determina diretório e nome do novo arquivo de backup
+                // O bloco try/catch abrange a resolução e criação de diretório para tratar diretórios inacessíveis/inválidos
+                // conforme o contrato do serviço, mas propaga sem ocultar qualquer falha de segurança ([SEGURANÇA DE EXECUÇÃO]).
+                string targetDir;
+                try
+                {
+                    if (!string.IsNullOrWhiteSpace(customTargetDir))
+                    {
+                        AssertSafeBackupDirectory(customTargetDir);
+                        targetDir = Path.GetFullPath(customTargetDir.Trim());
+                    }
+                    else
+                    {
+                        targetDir = GetAutoBackupDirectory();
+                    }
+
+                    if (!Directory.Exists(targetDir))
+                    {
+                        Directory.CreateDirectory(targetDir);
+                    }
+                }
+                catch (InvalidOperationException secEx) when (secEx.Message.Contains("[SEGURANÇA DE EXECUÇÃO]", StringComparison.Ordinal))
+                {
+                    throw;
+                }
+                catch (Exception dirEx)
+                {
+                    string dirErrMsg = $"Diretório de backup inacessível: {dirEx.Message}";
+                    if (_context != null)
+                    {
+                        try
+                        {
+                            await UpsertSettingAsync(SettingKeyLastAutoBackupError, $"{DateTime.Now:dd/MM/yyyy HH:mm}: {dirErrMsg}");
+                            await _context.SaveChangesAsync();
+                        }
+                        catch { }
+                    }
+                    return new BackupResult
+                    {
+                        Success = false,
+                        Message = dirErrMsg
+                    };
+                }
+
+                string fileName = $"CobraPix_AutoBackup_{DateTime.Now:yyyyMMdd_HHmmss}.cpb";
+                string fullTargetPath = Path.Combine(targetDir, fileName);
+
+                // 5. Executa a criação do backup usando o método seguro CreateBackupAsync
+                var result = await CreateBackupAsync(fullTargetPath, customSourceDb);
+                if (!result.Success)
+                {
+                    // Falha na criação: registra erro e preserva o estado anterior sem marcar a data de hoje
+                    if (_context != null)
+                    {
+                        try
+                        {
+                            await UpsertSettingAsync(SettingKeyLastAutoBackupError, $"{DateTime.Now:dd/MM/yyyy HH:mm}: {result.Message}");
+                            await _context.SaveChangesAsync();
+                        }
+                        catch { }
+                    }
+                    return result;
+                }
+
+                // 6. Validação rigorosa de integridade, formato e SHA-256 do arquivo gerado
+                var validationResult = ValidateBackupFile(fullTargetPath);
+                if (!validationResult.IsValid)
+                {
+                    // Se corrompido, exclui arquivo com defeito e registra falha
+                    try { if (File.Exists(fullTargetPath)) File.Delete(fullTargetPath); } catch { }
+
+                    string errMsg = $"Validação de integridade do backup automático falhou: {validationResult.ErrorMessage}";
+                    if (_context != null)
+                    {
+                        try
+                        {
+                            await UpsertSettingAsync(SettingKeyLastAutoBackupError, $"{DateTime.Now:dd/MM/yyyy HH:mm}: {errMsg}");
+                            await _context.SaveChangesAsync();
+                        }
+                        catch { }
+                    }
+
+                    return new BackupResult
+                    {
+                        Success = false,
+                        Message = errMsg
+                    };
+                }
+
+                // 7. Sucesso absoluto: grava o registro oficial do backup automático diário
+                if (_context != null)
+                {
+                    try
+                    {
+                        await UpsertSettingAsync(SettingKeyLastAutoBackupDate, todayStr);
+                        await UpsertSettingAsync(SettingKeyLastAutoBackupFile, fullTargetPath);
+                        // Limpa qualquer erro anterior
+                        var errSetting = await _context.AppSettings.FirstOrDefaultAsync(s => s.Key == SettingKeyLastAutoBackupError);
+                        if (errSetting != null)
+                        {
+                            _context.AppSettings.Remove(errSetting);
+                        }
+                        await _context.SaveChangesAsync();
+                    }
+                    catch { }
+                }
+
+                return result;
+            }
+            finally
+            {
+                _autoBackupLock.Release();
             }
         }
     }

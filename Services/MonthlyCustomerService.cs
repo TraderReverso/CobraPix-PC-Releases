@@ -24,7 +24,8 @@ namespace CobraPix_PC.Services
             decimal monthlyAmount,
             int dueDay,
             DateTime startDate,
-            string? notes = null)
+            string? notes = null,
+            double contractInterestRate = 0.0)
         {
             if (clientId <= 0)
             {
@@ -53,19 +54,36 @@ namespace CobraPix_PC.Services
                 throw new BusinessRuleException("O dia de vencimento deve estar entre 1 e 31.");
             }
 
+            decimal finalMonthly = monthlyAmount;
+            decimal interestAmount = 0m;
+            if (contractInterestRate > 0.0)
+            {
+                var calc = PaymentLogic.CalculateMonthlyContractInterest(monthlyAmount, contractInterestRate);
+                interestAmount = calc.interestAmount;
+                finalMonthly = calc.finalMonthlyValue;
+            }
+
             var monthlyCustomer = new MonthlyCustomer
             {
                 ClientId = clientId,
-                MonthlyAmount = monthlyAmount,
+                MonthlyAmount = finalMonthly,
+                OriginalMonthlyAmount = monthlyAmount,
+                ContractInterestRate = contractInterestRate > 0.0 ? contractInterestRate : 0.0,
+                ContractInterestAmount = interestAmount,
                 DueDay = dueDay,
                 StartDate = startDate.Date,
                 IsActive = true,
                 Notes = notes?.Trim(),
                 CreatedAt = DateTime.Now
             };
+            monthlyCustomer.EmbedParityMetadata(monthlyAmount, contractInterestRate > 0.0 ? contractInterestRate : 0.0, interestAmount);
 
             _context.MonthlyCustomers.Add(monthlyCustomer);
             await _context.SaveChangesAsync();
+
+            DiagnosticLogger.Instance.LogInformation("MonthlyCustomerService",
+                $"Mensalista criado para cliente #{clientId}. Valor: {finalMonthly:C2}, Principal: {monthlyAmount:C2}, Juros: {interestAmount:C2} ({contractInterestRate}%).");
+
             return monthlyCustomer;
         }
 
@@ -73,7 +91,8 @@ namespace CobraPix_PC.Services
             int id,
             decimal monthlyAmount,
             int dueDay,
-            string? notes = null)
+            string? notes = null,
+            double contractInterestRate = 0.0)
         {
             var customer = await _context.MonthlyCustomers.FirstOrDefaultAsync(m => m.Id == id);
             if (customer == null)
@@ -91,9 +110,22 @@ namespace CobraPix_PC.Services
                 throw new BusinessRuleException("O dia de vencimento deve estar entre 1 e 31.");
             }
 
-            customer.MonthlyAmount = monthlyAmount;
+            decimal finalMonthly = monthlyAmount;
+            decimal interestAmount = 0m;
+            if (contractInterestRate > 0.0)
+            {
+                var calc = PaymentLogic.CalculateMonthlyContractInterest(monthlyAmount, contractInterestRate);
+                interestAmount = calc.interestAmount;
+                finalMonthly = calc.finalMonthlyValue;
+            }
+
+            customer.MonthlyAmount = finalMonthly;
+            customer.OriginalMonthlyAmount = monthlyAmount;
+            customer.ContractInterestRate = contractInterestRate > 0.0 ? contractInterestRate : 0.0;
+            customer.ContractInterestAmount = interestAmount;
             customer.DueDay = dueDay;
             customer.Notes = notes?.Trim();
+            customer.EmbedParityMetadata(monthlyAmount, contractInterestRate > 0.0 ? contractInterestRate : 0.0, interestAmount);
 
             await _context.SaveChangesAsync();
             return customer;
@@ -218,6 +250,31 @@ namespace CobraPix_PC.Services
                 .ThenByDescending(p => p.ReferenceMonth)
                 .ThenByDescending(p => p.PaymentDate)
                 .ToListAsync();
+        }
+
+        public async Task<bool> DeleteMonthlyPaymentAsync(int paymentId)
+        {
+            if (paymentId <= 0)
+            {
+                throw new BusinessRuleException("Identificador de pagamento inválido.");
+            }
+
+            var payment = await _context.MonthlyPayments.FirstOrDefaultAsync(p => p.Id == paymentId);
+            if (payment == null)
+            {
+                throw new BusinessRuleException($"Pagamento com ID {paymentId} não encontrado.");
+            }
+
+            // Pagamento já registrado como efetivo na tabela MonthlyPayments:
+            // Por paridade com Android, pagamentos já realizados requerem estorno explicito
+            if (payment.Amount > 0)
+            {
+                throw new BusinessRuleException("Não é possível excluir um lançamento já pago. Estorne o pagamento primeiro.");
+            }
+
+            _context.MonthlyPayments.Remove(payment);
+            await _context.SaveChangesAsync();
+            return true;
         }
     }
 }

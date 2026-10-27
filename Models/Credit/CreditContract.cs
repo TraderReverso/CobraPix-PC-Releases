@@ -19,6 +19,16 @@ namespace CobraPix_PC.Models.Credit
 
         public CreditContractType ContractType { get; set; }
 
+        /// <summary>
+        /// Periodicidade das parcelas (default: Monthly).
+        /// </summary>
+        public CreditPeriodicity Periodicity { get; set; } = CreditPeriodicity.Monthly;
+
+        /// <summary>
+        /// Quantidade de dias de intervalo quando a periodicidade for personalizada (CustomDays).
+        /// </summary>
+        public int? CustomIntervalDays { get; set; }
+
         public CreditContractStatus Status { get; set; } = CreditContractStatus.Draft;
 
         /// <summary>
@@ -35,6 +45,13 @@ namespace CobraPix_PC.Models.Credit
         /// Valor total do contrato em centavos (Principal + Juros).
         /// </summary>
         public long TotalAmountCents { get; set; }
+
+        public string FormattedDisbursedPrincipal => (DisbursedPrincipalCents / 100.0).ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
+        public string FormattedTotalNominalInterest => (TotalNominalInterestCents / 100.0).ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
+        public string FormattedTotalAmount => (TotalAmountCents / 100.0).ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
+        public string DisplaySummary => string.IsNullOrWhiteSpace(ContractNumber)
+            ? $"ID: {Id.Substring(0, Math.Min(8, Id.Length))} - {Client?.Name ?? "Cliente"} ({FormattedTotalAmount}) [{Status}]"
+            : $"#{ContractNumber} - {Client?.Name ?? "Cliente"} ({FormattedTotalAmount}) [{Status}]";
 
         /// <summary>
         /// Data civil do contrato / desembolso planejado.

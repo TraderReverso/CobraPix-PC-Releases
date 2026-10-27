@@ -6,6 +6,7 @@ namespace CobraPix_PC.Models
     public enum AppTheme
     {
         Dark,
-        Light
+        Light,
+        GreenYellow
     }
 }

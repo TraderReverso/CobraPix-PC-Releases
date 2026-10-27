@@ -704,6 +704,71 @@
                             </StackPanel>
                         </Grid>
 
+                        <!-- Grid 2 Colunas: Juros Contratuais e Periodicidade -->
+                        <Grid Margin="0,0,0,14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="16" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Taxa de Juros (%) -->
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="JUROS DO CONTRATO (%)" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4" />
+                                <TextBox Style="{StaticResource InputTextBoxStyle}"
+                                         Text="{Binding FormContractInterestRateText, UpdateSourceTrigger=PropertyChanged}" />
+                            </StackPanel>
+
+                            <!-- Periodicidade -->
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="PERIODICIDADE *" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4" />
+                                <ComboBox ItemsSource="{Binding PeriodicityOptions}"
+                                          SelectedValue="{Binding FormPeriodicity}"
+                                          SelectedValuePath="Value"
+                                          DisplayMemberPath="DisplayName"
+                                          Height="34" />
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Opção 5º Dia Útil (visível somente quando Periodicidade = Mensal) -->
+                        <StackPanel Margin="0,0,0,14">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsPeriodicityMonthly}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <CheckBox Content="Vencimento no 5º dia útil de cada mês"
+                                      IsChecked="{Binding FormUseFifthBusinessDay}"
+                                      Foreground="{DynamicResource TextPrimaryBrush}"
+                                      FontSize="12"
+                                      Cursor="Hand" />
+                        </StackPanel>
+
+                        <!-- Opção Dia da Semana (visível somente quando Periodicidade = Semanal ou Quinzenal) -->
+                        <StackPanel Margin="0,0,0,14">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsPeriodicityWeeklyOrBiweekly}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <TextBlock Text="DIA DA SEMANA DE VENCIMENTO *" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4" />
+                            <ComboBox ItemsSource="{Binding WeekdayOptions}"
+                                      SelectedValue="{Binding FormTargetWeekdayIndex}"
+                                      SelectedValuePath="Value"
+                                      DisplayMemberPath="DisplayName"
+                                      Height="34" />
+                        </StackPanel>
+
                         <!-- Primeiro Vencimento -->
                         <TextBlock Text="PRIMEIRO VENCIMENTO *" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4" />
                         <DatePicker SelectedDate="{Binding FormFirstDueDate}"

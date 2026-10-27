@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using CobraPix_PC.Data;
 using CobraPix_PC.Helpers;
 using CobraPix_PC.Models;
 using CobraPix_PC.Models.Credit;
@@ -55,6 +56,14 @@ namespace CobraPix_PC.ViewModels.Modules
         public bool IsFree => !IsPro;
         public string PlanBadgeText => IsPro ? "👑 PRO ATIVO" : "BLOQUEADO (RECURSO PRO)";
 
+        public bool IsSyntheticDatabase => DatabasePath.IsTestExecutionMode();
+        public string EnvironmentBadgeText => IsSyntheticDatabase
+            ? "🧪 HOMOLOGAÇÃO SINTÉTICA (GRAVAÇÕES LIBERADAS)"
+            : "🔒 PRODUÇÃO (GRAVAÇÕES BLOQUEADAS)";
+        public string EnvironmentBadgeBackground => IsSyntheticDatabase ? "#059669" : "#3B1212";
+        public string EnvironmentBadgeForeground => IsSyntheticDatabase ? "#FFFFFF" : "#FCA5A5";
+        public string ActiveDatabaseDisplay => DatabasePath.GetDatabaseFilePath();
+
         public bool IsBusy
         {
             get => _isBusy;
@@ -67,16 +76,31 @@ namespace CobraPix_PC.ViewModels.Modules
             set => SetProperty(ref _statusMessage, value);
         }
 
+        public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
+        public bool HasSuccess => !string.IsNullOrWhiteSpace(SuccessMessage);
+
         public string? ErrorMessage
         {
             get => _errorMessage;
-            set => SetProperty(ref _errorMessage, value);
+            set
+            {
+                if (SetProperty(ref _errorMessage, value))
+                {
+                    OnPropertyChanged(nameof(HasError));
+                }
+            }
         }
 
         public string? SuccessMessage
         {
             get => _successMessage;
-            set => SetProperty(ref _successMessage, value);
+            set
+            {
+                if (SetProperty(ref _successMessage, value))
+                {
+                    OnPropertyChanged(nameof(HasSuccess));
+                }
+            }
         }
 
         public int SelectedTabIndex
@@ -109,6 +133,23 @@ namespace CobraPix_PC.ViewModels.Modules
                     OnPropertyChanged(nameof(HasSelectedContract));
                     OnPropertyChanged(nameof(CanDisburseSelectedContract));
                     OnPropertyChanged(nameof(CanCancelSelectedContract));
+                    if (value != null)
+                    {
+                        PaymentContractId = value.Id;
+                        SelectedPaymentContract = value;
+                    }
+                }
+            }
+        }
+
+        private CreditContract? _selectedPaymentContract;
+        public CreditContract? SelectedPaymentContract
+        {
+            get => _selectedPaymentContract;
+            set
+            {
+                if (SetProperty(ref _selectedPaymentContract, value))
+                {
                     if (value != null)
                     {
                         PaymentContractId = value.Id;
@@ -155,6 +196,31 @@ namespace CobraPix_PC.ViewModels.Modules
             get => _newInstallmentsCount;
             set => SetProperty(ref _newInstallmentsCount, value);
         }
+
+        private CreditPeriodicity _newPeriodicity = CreditPeriodicity.Monthly;
+        public CreditPeriodicity NewPeriodicity
+        {
+            get => _newPeriodicity;
+            set
+            {
+                if (SetProperty(ref _newPeriodicity, value))
+                {
+                    OnPropertyChanged(nameof(IsCustomPeriodicity));
+                }
+            }
+        }
+
+        public bool IsCustomPeriodicity => NewPeriodicity == CreditPeriodicity.CustomDays;
+
+        private int? _newCustomIntervalDays = 15;
+        public int? NewCustomIntervalDays
+        {
+            get => _newCustomIntervalDays;
+            set => SetProperty(ref _newCustomIntervalDays, value);
+        }
+
+        public IEnumerable<CreditPeriodicity> AvailablePeriodicities { get; } =
+            Enum.GetValues(typeof(CreditPeriodicity)).Cast<CreditPeriodicity>();
 
         private DateTime _newFirstDueDate = DateTime.Today.AddDays(30);
         public DateTime NewFirstDueDate
@@ -477,7 +543,10 @@ namespace CobraPix_PC.ViewModels.Modules
                     SelectedClient = Clients[0];
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                ErrorMessage = $"Erro ao carregar clientes: {ex.Message}";
+            }
         }
 
         public async Task LoadContractsAsync()
@@ -498,6 +567,11 @@ namespace CobraPix_PC.ViewModels.Modules
                 else if (Contracts.Count > 0)
                 {
                     SelectedContract = Contracts[0];
+                }
+
+                if (SelectedPaymentContract == null && SelectedContract != null)
+                {
+                    SelectedPaymentContract = SelectedContract;
                 }
             }
             catch (Exception ex)
@@ -596,10 +670,10 @@ namespace CobraPix_PC.ViewModels.Modules
             await InitializeAsync();
             if (IsPro)
             {
-                await LoadContractsAsync();
-                await LoadPaymentsAsync();
-                await LoadSurplusBalancesAsync();
-                await LoadRefundsAndDevolutionsAsync();
+                if (SelectedTabIndex != 0) await LoadContractsAsync();
+                if (SelectedTabIndex != 1) await LoadPaymentsAsync();
+                if (SelectedTabIndex != 2) await LoadSurplusBalancesAsync();
+                if (SelectedTabIndex != 3) await LoadRefundsAndDevolutionsAsync();
             }
         }
 
@@ -635,10 +709,19 @@ namespace CobraPix_PC.ViewModels.Modules
                 return;
             }
 
-            if (NewInstallmentsCount < 1)
+            if (NewInstallmentsCount < 1 || NewInstallmentsCount > 360)
             {
-                ErrorMessage = "A quantidade de parcelas deve ser de pelo menos 1.";
+                ErrorMessage = "A quantidade de parcelas deve estar entre 1 e 360.";
                 return;
+            }
+
+            if (NewPeriodicity == CreditPeriodicity.CustomDays)
+            {
+                if (!NewCustomIntervalDays.HasValue || NewCustomIntervalDays.Value < 1 || NewCustomIntervalDays.Value > 365)
+                {
+                    ErrorMessage = "Para periodicidade personalizada, informe um intervalo válido entre 1 e 365 dias.";
+                    return;
+                }
             }
 
             IsBusy = true;
@@ -652,6 +735,8 @@ namespace CobraPix_PC.ViewModels.Modules
                     ClientId = SelectedClient.Id,
                     ContractNumber = NewContractNumber.Trim(),
                     ContractType = CreditContractType.FixedInstallments,
+                    Periodicity = NewPeriodicity,
+                    CustomIntervalDays = NewPeriodicity == CreditPeriodicity.CustomDays ? NewCustomIntervalDays : null,
                     PrincipalAmountCents = principalCents,
                     TotalInterestCents = interestCents,
                     InstallmentsCount = NewInstallmentsCount,
@@ -664,7 +749,15 @@ namespace CobraPix_PC.ViewModels.Modules
                 var res = await _contractService.CreateFixedContractAsync(req);
                 SuccessMessage = $"Contrato '{res.ContractNumber}' criado com sucesso! Total: R$ {res.TotalAmountCents / 100.0:N2} ({res.InstallmentsGenerated} parcelas).";
                 NewContractNumber = string.Empty;
+                NewNotes = string.Empty;
                 await LoadContractsAsync();
+
+                var createdContract = Contracts.FirstOrDefault(c => c.Id == res.ContractId);
+                if (createdContract != null)
+                {
+                    SelectedContract = createdContract;
+                    SelectedPaymentContract = createdContract;
+                }
             }
             catch (Exception ex)
             {
@@ -758,15 +851,56 @@ namespace CobraPix_PC.ViewModels.Modules
         // ==========================================
         // AÇÕES DA ABA PAGAMENTOS
         // ==========================================
+        public CreditContract? ResolveContract(string? input)
+        {
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                return SelectedPaymentContract ?? SelectedContract;
+            }
+
+            string trimmed = input.Trim();
+
+            // 1. Já coincide com o contrato selecionado
+            if (SelectedPaymentContract != null &&
+                (string.Equals(SelectedPaymentContract.Id, trimmed, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(SelectedPaymentContract.ContractNumber, trimmed, StringComparison.OrdinalIgnoreCase)))
+            {
+                return SelectedPaymentContract;
+            }
+
+            // 2. Busca por Id (GUID)
+            var byId = Contracts.FirstOrDefault(c => string.Equals(c.Id, trimmed, StringComparison.OrdinalIgnoreCase));
+            if (byId != null) return byId;
+
+            // 3. Busca por ContractNumber (Código ou Número do Contrato)
+            var byNumber = Contracts.FirstOrDefault(c => string.Equals(c.ContractNumber, trimmed, StringComparison.OrdinalIgnoreCase));
+            if (byNumber != null) return byNumber;
+
+            // 4. Busca por Nome do Cliente (se correspondência única)
+            var byClient = Contracts.Where(c => c.Client != null && string.Equals(c.Client.Name, trimmed, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (byClient.Count == 1) return byClient[0];
+
+            return SelectedPaymentContract;
+        }
+
         public async Task PreviewPaymentAsync()
         {
             if (IsBusy) return;
             ClearMessages();
 
-            if (string.IsNullOrWhiteSpace(PaymentContractId))
+            var resolved = ResolveContract(PaymentContractId);
+            string effectiveContractId = resolved?.Id ?? PaymentContractId?.Trim() ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(effectiveContractId))
             {
-                ErrorMessage = "Selecione ou informe o ID do contrato para a prévia.";
+                ErrorMessage = "Selecione um contrato ou informe o código/número ou ID do contrato.";
                 return;
+            }
+
+            if (resolved != null)
+            {
+                PaymentContractId = resolved.Id;
+                SelectedPaymentContract = resolved;
             }
 
             if (PaymentAmount <= 0)
@@ -778,7 +912,7 @@ namespace CobraPix_PC.ViewModels.Modules
             try
             {
                 long cents = (long)Math.Round(PaymentAmount * 100m, MidpointRounding.AwayFromZero);
-                PaymentPreview = await _paymentService.PreviewPaymentDistributionAsync(PaymentContractId.Trim(), cents);
+                PaymentPreview = await _paymentService.PreviewPaymentDistributionAsync(effectiveContractId, cents);
                 StatusMessage = $"Prévia calculada: Juros R$ {PaymentPreview.TotalInterestAllocatedCents / 100.0:N2}, Principal R$ {PaymentPreview.TotalPrincipalAllocatedCents / 100.0:N2}, Excedente R$ {PaymentPreview.SurplusGeneratedCents / 100.0:N2}.";
             }
             catch (Exception ex)
@@ -798,10 +932,19 @@ namespace CobraPix_PC.ViewModels.Modules
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(PaymentContractId))
+            var resolved = ResolveContract(PaymentContractId);
+            string effectiveContractId = resolved?.Id ?? PaymentContractId?.Trim() ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(effectiveContractId))
             {
-                ErrorMessage = "Informe o ID do contrato.";
+                ErrorMessage = "Selecione um contrato ou informe o código/número ou ID do contrato.";
                 return;
+            }
+
+            if (resolved != null)
+            {
+                PaymentContractId = resolved.Id;
+                SelectedPaymentContract = resolved;
             }
 
             if (PaymentAmount <= 0)
@@ -816,7 +959,7 @@ namespace CobraPix_PC.ViewModels.Modules
                 long cents = (long)Math.Round(PaymentAmount * 100m, MidpointRounding.AwayFromZero);
                 var req = new PaymentRequestDto
                 {
-                    ContractId = PaymentContractId.Trim(),
+                    ContractId = effectiveContractId,
                     AmountCents = cents,
                     PaymentDate = PaymentDate.Date,
                     PaymentMethod = PaymentMethod,
@@ -834,6 +977,7 @@ namespace CobraPix_PC.ViewModels.Modules
                 PaymentNotes = string.Empty;
                 PaymentPreview = null;
                 await LoadPaymentsAsync();
+                await LoadContractsAsync();
             }
             catch (Exception ex)
             {
@@ -1090,11 +1234,16 @@ namespace CobraPix_PC.ViewModels.Modules
             return $"Erro: {ex.Message}";
         }
 
-        private void ClearMessages()
+        public void ClearMessages()
         {
-            ErrorMessage = null;
-            SuccessMessage = null;
-            StatusMessage = null;
+            _errorMessage = null;
+            _successMessage = null;
+            _statusMessage = null;
+            OnPropertyChanged(nameof(ErrorMessage));
+            OnPropertyChanged(nameof(SuccessMessage));
+            OnPropertyChanged(nameof(StatusMessage));
+            OnPropertyChanged(nameof(HasError));
+            OnPropertyChanged(nameof(HasSuccess));
         }
     }
 }

@@ -1044,8 +1044,18 @@
                                                     <TextBlock Text="{Binding FormattedAmount}"
                                                                FontSize="13"
                                                                FontWeight="Bold"
-                                                               Foreground="{DynamicResource SuccessBrush}"
-                                                               HorizontalAlignment="Right" />
+                                                               HorizontalAlignment="Right">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsRefund}" Value="True">
+                                                                        <Setter Property="Foreground" Value="#F87171" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
                                                     <Border Background="{DynamicResource CardHoverBrush}"
                                                             CornerRadius="3"
                                                             Padding="6,1"

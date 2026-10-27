@@ -21,6 +21,9 @@ namespace CobraPix_PC.Models.Credit
 
         public long RemainingSurplusCents { get; set; }
 
+        public string FormattedOriginalSurplus => (OriginalSurplusCents / 100.0).ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
+        public string FormattedRemainingSurplus => (RemainingSurplusCents / 100.0).ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
+
         public CreditSurplusStatus Status { get; set; } = CreditSurplusStatus.Available;
 
         public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;

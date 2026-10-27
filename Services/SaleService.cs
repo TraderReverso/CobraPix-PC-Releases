@@ -25,7 +25,11 @@ namespace CobraPix_PC.Services
             int installmentCount,
             DateTime firstDueDate,
             string? description = null,
-            string? notes = null)
+            string? notes = null,
+            double contractInterestRate = 0.0,
+            bool useFifthBusinessDay = false,
+            int periodicity = 0,
+            DayOfWeek? targetWeekday = null)
         {
             // Validações
             if (clientId <= 0)
@@ -49,19 +53,35 @@ namespace CobraPix_PC.Services
                 throw new BusinessRuleException("A quantidade de parcelas deve ser de pelo menos 1.");
             }
 
-            // Geração consistente das parcelas com divisão precisa de centavos
-            var generatedInstallments = GenerateInstallments(totalAmount, installmentCount, firstDueDate);
+            // Geração consistente das parcelas com divisão precisa de centavos e juros
+            var generatedInstallments = GenerateInstallments(
+                totalAmount,
+                installmentCount,
+                firstDueDate,
+                contractInterestRate,
+                useFifthBusinessDay,
+                periodicity,
+                targetWeekday);
+
+            decimal finalTotal = generatedInstallments.Sum(i => i.Amount);
+            decimal interestAmount = Math.Max(0m, finalTotal - totalAmount);
 
             var sale = new Sale
             {
                 ClientId = clientId,
-                TotalAmount = totalAmount,
+                TotalAmount = finalTotal,
+                OriginalPrincipal = totalAmount,
+                ContractInterestRate = contractInterestRate > 0.0 ? contractInterestRate : 0.0,
+                ContractInterestAmount = interestAmount,
                 InstallmentCount = installmentCount,
                 SaleDate = DateTime.Today,
                 Description = description?.Trim(),
                 Notes = notes?.Trim(),
+                UseFifthBusinessDay = useFifthBusinessDay,
+                Periodicity = periodicity,
                 CreatedAt = DateTime.Now
             };
+            sale.EmbedParityMetadata(totalAmount, contractInterestRate > 0.0 ? contractInterestRate : 0.0, interestAmount, useFifthBusinessDay, periodicity);
 
             // Utiliza transação para garantir que venda e todas as suas parcelas sejam gravadas atomicamente
             await using var transaction = await _context.Database.BeginTransactionAsync();
@@ -79,6 +99,9 @@ namespace CobraPix_PC.Services
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
+                DiagnosticLogger.Instance.LogInformation("SaleService",
+                    $"Venda #{sale.Id} criada para cliente #{clientId}. Total: {finalTotal:C2}, Principal: {totalAmount:C2}, Juros: {interestAmount:C2} ({contractInterestRate}%), Parcelas: {installmentCount}.");
+
                 return sale;
             }
             catch (Exception ex)
@@ -88,11 +111,14 @@ namespace CobraPix_PC.Services
             }
         }
 
-        /// <summary>
-        /// Divide o valor total entre as parcelas com distribuição exata dos centavos restantes
-        /// e calcula os vencimentos mensais tratando meses com 28, 29, 30 ou 31 dias.
-        /// </summary>
-        public static List<Installment> GenerateInstallments(decimal totalAmount, int installmentCount, DateTime firstDueDate)
+        public static List<Installment> GenerateInstallments(
+            decimal totalAmount,
+            int installmentCount,
+            DateTime firstDueDate,
+            double contractInterestRate = 0.0,
+            bool useFifthBusinessDay = false,
+            int periodicity = 0,
+            DayOfWeek? targetWeekday = null)
         {
             if (totalAmount <= 0)
                 throw new BusinessRuleException("Valor total deve ser maior que zero.");
@@ -100,22 +126,29 @@ namespace CobraPix_PC.Services
             if (installmentCount <= 0)
                 throw new BusinessRuleException("Quantidade de parcelas deve ser maior que zero.");
 
-            // Truncamento na 2ª casa decimal para o valor base de cada parcela
-            decimal baseAmount = Math.Floor((totalAmount / installmentCount) * 100m) / 100m;
-            decimal remainder = totalAmount - (baseAmount * installmentCount);
-            int remainderCents = (int)Math.Round(remainder * 100m);
+            var calc = PaymentLogic.CalculateContractInterest(totalAmount, contractInterestRate, installmentCount);
+            var dueDates = PaymentLogic.CalculateInstallmentDueDates(
+                installmentCount,
+                firstDueDate,
+                useFifthBusinessDay,
+                periodicity,
+                targetWeekday);
 
             var list = new List<Installment>(installmentCount);
 
-            for (int i = 1; i <= installmentCount; i++)
+            for (int i = 0; i < installmentCount; i++)
             {
-                // Os centavos residuais são distribuídos 1 a 1 nas primeiras parcelas
-                decimal amount = baseAmount + (i <= remainderCents ? 0.01m : 0.00m);
-                DateTime dueDate = CalculateMonthlyDueDate(firstDueDate, i - 1);
+                decimal amount = (i < calc.InstallmentValues.Count)
+                    ? calc.InstallmentValues[i]
+                    : totalAmount / installmentCount;
+
+                DateTime dueDate = (i < dueDates.Count)
+                    ? dueDates[i]
+                    : PaymentLogic.CalculateMonthlyDueDate(firstDueDate, i);
 
                 list.Add(new Installment
                 {
-                    InstallmentNumber = i,
+                    InstallmentNumber = i + 1,
                     Amount = amount,
                     DueDate = dueDate,
                     Status = InstallmentStatus.Pending
@@ -123,25 +156,6 @@ namespace CobraPix_PC.Services
             }
 
             return list;
-        }
-
-        /// <summary>
-        /// Calcula o vencimento da n-ésima parcela mensal, preservando o dia original
-        /// e ajustando para o último dia válido em meses com menor quantidade de dias (ex: 31/01 -> 28/02).
-        /// </summary>
-        public static DateTime CalculateMonthlyDueDate(DateTime firstDueDate, int installmentIndex)
-        {
-            if (installmentIndex == 0)
-                return firstDueDate;
-
-            int targetDay = firstDueDate.Day;
-            int totalMonths = (firstDueDate.Year * 12 + (firstDueDate.Month - 1)) + installmentIndex;
-            int year = totalMonths / 12;
-            int month = (totalMonths % 12) + 1;
-            int daysInMonth = DateTime.DaysInMonth(year, month);
-            int day = Math.Min(targetDay, daysInMonth);
-
-            return new DateTime(year, month, day, firstDueDate.Hour, firstDueDate.Minute, firstDueDate.Second);
         }
 
         public async Task<Sale?> GetSaleByIdAsync(int saleId)
@@ -176,9 +190,23 @@ namespace CobraPix_PC.Services
                 .ToListAsync();
         }
 
-        public List<Installment> PreviewInstallments(decimal totalAmount, int installmentCount, DateTime firstDueDate)
+        public List<Installment> PreviewInstallments(
+            decimal totalAmount,
+            int installmentCount,
+            DateTime firstDueDate,
+            double contractInterestRate = 0.0,
+            bool useFifthBusinessDay = false,
+            int periodicity = 0,
+            DayOfWeek? targetWeekday = null)
         {
-            return GenerateInstallments(totalAmount, installmentCount, firstDueDate);
+            return GenerateInstallments(
+                totalAmount,
+                installmentCount,
+                firstDueDate,
+                contractInterestRate,
+                useFifthBusinessDay,
+                periodicity,
+                targetWeekday);
         }
 
         public async Task<List<Installment>> GetInstallmentsBySaleIdAsync(int saleId)
@@ -188,6 +216,58 @@ namespace CobraPix_PC.Services
                 .Include(i => i.Payments)
                 .OrderBy(i => i.InstallmentNumber)
                 .ToListAsync();
+        }
+
+        public async Task<bool> DeleteInstallmentAsync(int installmentId)
+        {
+            if (installmentId <= 0)
+            {
+                throw new BusinessRuleException("Identificador de parcela inválido.");
+            }
+
+            var installment = await _context.Installments
+                .Include(i => i.Payments)
+                .Include(i => i.Sale)
+                .FirstOrDefaultAsync(i => i.Id == installmentId);
+
+            if (installment == null)
+            {
+                throw new BusinessRuleException($"Parcela com ID {installmentId} não encontrada.");
+            }
+
+            // Regra mandatória de segurança financeira (Paridade com Android):
+            // Não é permitido excluir uma parcela com pagamentos registrados ou já quitada.
+            if (installment.Payments.Any(p => p.AmountPaid > 0) || installment.Status == InstallmentStatus.Paid)
+            {
+                throw new BusinessRuleException(
+                    "Não é possível excluir uma parcela com pagamentos registrados. Estorne os pagamentos no histórico primeiro.");
+            }
+
+            int saleId = installment.SaleId;
+            var sale = installment.Sale;
+
+            _context.Installments.Remove(installment);
+            await _context.SaveChangesAsync();
+
+            // Recálculo imediato do valor total e contagem da venda após exclusão
+            if (sale != null)
+            {
+                var remaining = await _context.Installments
+                    .Where(i => i.SaleId == saleId)
+                    .ToListAsync();
+
+                var (newTotal, newCount) = PaymentLogic.RecalculateSaleAfterInstallmentDeletion(
+                    remaining.Select(i => i.Amount));
+
+                sale.TotalAmount = newTotal;
+                sale.InstallmentCount = newCount;
+                await _context.SaveChangesAsync();
+
+                DiagnosticLogger.Instance.LogInformation("SaleService",
+                    $"Parcela #{installmentId} excluída. Venda #{saleId} recalculada: {newCount} parcelas restantes, novo total: {newTotal:C2}.");
+            }
+
+            return true;
         }
     }
 }

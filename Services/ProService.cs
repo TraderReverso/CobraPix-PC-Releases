@@ -65,6 +65,8 @@ namespace CobraPix_PC.Services
         private readonly CobraPixDbContext _context;
         private readonly ILicenseService _licenseService;
 
+        internal CobraPixDbContext DbContext => _context;
+
         public event EventHandler? PlanChanged;
 
         public ILicenseService LicenseService => _licenseService;

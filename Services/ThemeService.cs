@@ -20,6 +20,8 @@ namespace CobraPix_PC.Services
         private readonly CobraPixDbContext _context;
         private AppTheme _currentTheme = AppTheme.Dark;
 
+        internal CobraPixDbContext DbContext => _context;
+
         public event EventHandler<AppTheme>? ThemeChanged;
 
         public AppTheme CurrentTheme => _currentTheme;
@@ -95,19 +97,22 @@ namespace CobraPix_PC.Services
                 {
                     var action = new Action(() =>
                     {
+                        string fileName = theme switch
+                        {
+                            AppTheme.Light => "ColorsLight.xaml",
+                            AppTheme.GreenYellow => "ColorsGreenYellow.xaml",
+                            _ => "Colors.xaml"
+                        };
+
                         ResourceDictionary themeDict;
                         try
                         {
-                            var packUri = theme == AppTheme.Light
-                                ? new Uri("pack://application:,,,/Resources/ColorsLight.xaml", UriKind.Absolute)
-                                : new Uri("pack://application:,,,/Resources/Colors.xaml", UriKind.Absolute);
+                            var packUri = new Uri($"pack://application:,,,/Resources/{fileName}", UriKind.Absolute);
                             themeDict = new ResourceDictionary { Source = packUri };
                         }
                         catch
                         {
-                            var relUri = theme == AppTheme.Light
-                                ? new Uri("/Resources/ColorsLight.xaml", UriKind.Relative)
-                                : new Uri("/Resources/Colors.xaml", UriKind.Relative);
+                            var relUri = new Uri($"/Resources/{fileName}", UriKind.Relative);
                             themeDict = new ResourceDictionary { Source = relUri };
                         }
 
@@ -120,7 +125,8 @@ namespace CobraPix_PC.Services
                         {
                             var d = mergedDicts[i];
                             if (d.Source != null && (d.Source.OriginalString.Contains("Colors.xaml", StringComparison.OrdinalIgnoreCase) ||
-                                                     d.Source.OriginalString.Contains("ColorsLight.xaml", StringComparison.OrdinalIgnoreCase)))
+                                                     d.Source.OriginalString.Contains("ColorsLight.xaml", StringComparison.OrdinalIgnoreCase) ||
+                                                     d.Source.OriginalString.Contains("ColorsGreenYellow.xaml", StringComparison.OrdinalIgnoreCase)))
                             {
                                 if (insertIndex == -1) insertIndex = i;
                                 toRemove.Add(d);
@@ -147,6 +153,7 @@ namespace CobraPix_PC.Services
 
                         Application.Current.Resources["IsDarkTheme"] = theme == AppTheme.Dark;
                         Application.Current.Resources["IsLightTheme"] = theme == AppTheme.Light;
+                        Application.Current.Resources["IsGreenYellowTheme"] = theme == AppTheme.GreenYellow;
 
                         // 3. Força invalidação visual em todas as janelas ativas
                         foreach (Window window in Application.Current.Windows)

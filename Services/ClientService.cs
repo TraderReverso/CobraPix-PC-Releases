@@ -15,6 +15,8 @@ namespace CobraPix_PC.Services
         private readonly CobraPixDbContext _context;
         private readonly IProService _proService;
 
+        internal CobraPixDbContext DbContext => _context;
+
         public ClientService(CobraPixDbContext context, IProService? proService = null)
         {
             _context = context ?? throw new ArgumentNullException(nameof(context));

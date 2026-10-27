@@ -236,6 +236,202 @@
                                 </WrapPanel>
                             </StackPanel>
                         </Border>
+
+                        <!-- ================================================ -->
+                        <!-- Card: Iniciar com o Windows (Fase Boot 1.0.4)      -->
+                        <!-- ================================================ -->
+                        <Border Background="{DynamicResource CardDarkBrush}"
+                                BorderBrush="{DynamicResource BorderDarkBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="24"
+                                Margin="0,0,0,16">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <TextBlock Text="🚀" FontSize="18" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="Inicialização do Sistema"
+                                               FontSize="16"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"
+                                               VerticalAlignment="Center" />
+                                </StackPanel>
+                                <TextBlock Text="Controle se o CobraPix PC deve iniciar automaticamente junto com o Windows para manter as notificações de cobrança sempre ativas."
+                                           FontSize="12"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                           Margin="0,0,0,16"
+                                           TextWrapping="Wrap" />
+
+                                <!-- Toggle: Iniciar com o Windows -->
+                                <Border Background="{DynamicResource SurfaceBrush}"
+                                        BorderBrush="{DynamicResource BorderDarkBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="6"
+                                        Padding="16,14">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                            <TextBlock Text="Iniciar com o Windows"
+                                                       FontSize="13"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource TextPrimaryBrush}" />
+                                            <TextBlock Text="Quando ativado, o CobraPix PC inicia automaticamente com o Windows (minimizado) e mantém as notificações de cobrança funcionando em segundo plano."
+                                                       FontSize="11"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                                       TextWrapping="Wrap"
+                                                       Margin="0,3,0,0" />
+                                        </StackPanel>
+                                        <CheckBox Grid.Column="1"
+                                                  IsChecked="{Binding StartWithWindows, Mode=TwoWay}"
+                                                  VerticalAlignment="Center"
+                                                  Cursor="Hand"
+                                                  Margin="16,0,0,0" />
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ================================================ -->
+                        <!-- Card: Chave Pix para Cobranças (Fase 4)          -->
+                        <!-- ================================================ -->
+                        <Border Background="{DynamicResource CardDarkBrush}"
+                                BorderBrush="{DynamicResource BorderDarkBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="24"
+                                Margin="0,0,0,16">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <TextBlock Text="💳" FontSize="18" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="Chave Pix para cobranças"
+                                               FontSize="16"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"
+                                               VerticalAlignment="Center" />
+                                </StackPanel>
+                                <TextBlock Text="Usada automaticamente nas mensagens de cobrança enviadas pelo WhatsApp."
+                                           FontSize="12"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                           Margin="0,0,0,16"
+                                           TextWrapping="Wrap" />
+
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="12" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBox Grid.Column="0"
+                                             Style="{StaticResource InputTextBoxStyle}"
+                                             Text="{Binding PixKey, UpdateSourceTrigger=PropertyChanged}"
+                                             VerticalContentAlignment="Center"
+                                             Height="38"
+                                             Padding="12,0" />
+
+                                    <Button Grid.Column="2"
+                                            Style="{StaticResource PrimaryButtonStyle}"
+                                            Command="{Binding SavePixKeyCommand}"
+                                            Content="Salvar Chave Pix"
+                                            Height="38"
+                                            Padding="18,0" />
+                                </Grid>
+
+                                <TextBlock Text="Dica: Pode ser CPF, CNPJ, e-mail, celular ou chave aleatória. Deixe vazio para enviar cobranças sem chave Pix."
+                                           FontSize="11"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           Margin="0,4,0,0" />
+
+                                <!-- Feedback ao salvar -->
+                                <Border Background="{DynamicResource SurfaceBrush}"
+                                        BorderBrush="{DynamicResource AccentBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="6"
+                                        Padding="12,8"
+                                        Margin="0,12,0,0"
+                                        Visibility="{Binding HasPixKeyFeedback, Converter={StaticResource BoolToVis}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="ℹ️ " FontSize="12" VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding PixKeyFeedbackMessage}"
+                                                   FontSize="12"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource TextPrimaryBrush}"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Card: Nome da Empresa / Emissor (Fase 5) -->
+                        <Border Background="{DynamicResource CardDarkBrush}"
+                                BorderBrush="{DynamicResource BorderDarkBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="24"
+                                Margin="0,0,0,16">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <TextBlock Text="🏢" FontSize="18" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="Nome da empresa / emissor"
+                                               FontSize="16"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"
+                                               VerticalAlignment="Center" />
+                                </StackPanel>
+                                <TextBlock Text="Utilizado no cabeçalho dos recibos e comprovantes de pagamento em PDF gerados pelo CobraPix PC."
+                                           FontSize="12"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                           Margin="0,0,0,16"
+                                           TextWrapping="Wrap" />
+
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="12" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBox Grid.Column="0"
+                                             Style="{StaticResource InputTextBoxStyle}"
+                                             Text="{Binding CompanyName, UpdateSourceTrigger=PropertyChanged}"
+                                             VerticalContentAlignment="Center"
+                                             Height="38"
+                                             Padding="12,0" />
+
+                                    <Button Grid.Column="2"
+                                            Style="{StaticResource PrimaryButtonStyle}"
+                                            Command="{Binding SaveCompanyNameCommand}"
+                                            Content="Salvar Nome"
+                                            Height="38"
+                                            Padding="18,0" />
+                                </Grid>
+
+                                <TextBlock Text="Dica: Exemplo: Gestão CPix, Minha Empresa LTDA. Se deixado vazio, os recibos serão gerados com o padrão COBRAPIX."
+                                           FontSize="11"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           Margin="0,4,0,0" />
+
+                                <!-- Feedback ao salvar -->
+                                <Border Background="{DynamicResource SurfaceBrush}"
+                                        BorderBrush="{DynamicResource AccentBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="6"
+                                        Padding="12,8"
+                                        Margin="0,12,0,0"
+                                        Visibility="{Binding HasCompanyNameFeedback, Converter={StaticResource BoolToVis}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="ℹ️ " FontSize="12" VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding CompanyNameFeedbackMessage}"
+                                                   FontSize="12"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource TextPrimaryBrush}"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </TabItem>
 
@@ -277,22 +473,11 @@
                                                        FontSize="12"
                                                        Foreground="{DynamicResource TextSecondaryBrush}"
                                                        VerticalAlignment="Center" />
-                                            <TextBlock Text="{Binding IsDarkTheme, ConverterParameter='Escuro (Solo Leveling)|Claro (Comercial)'}"
+                                            <TextBlock Text="{Binding ThemeDescriptionText}"
                                                        FontSize="12"
                                                        FontWeight="Bold"
                                                        Foreground="{DynamicResource AccentBrush}"
-                                                       VerticalAlignment="Center">
-                                                <TextBlock.Style>
-                                                    <Style TargetType="TextBlock">
-                                                        <Setter Property="Text" Value="Modo Claro" />
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding IsDarkTheme}" Value="True">
-                                                                <Setter Property="Text" Value="Escuro (Solo Leveling)" />
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </TextBlock.Style>
-                                            </TextBlock>
+                                                       VerticalAlignment="Center" />
                                         </StackPanel>
                                     </Border>
                                 </Grid>
@@ -306,7 +491,9 @@
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="16" />
+                                        <ColumnDefinition Width="12" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="12" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
 
@@ -400,6 +587,54 @@
                                             <RadioButton Grid.Column="1"
                                                          IsChecked="{Binding IsLightTheme, Mode=OneWay}"
                                                          Command="{Binding SetLightThemeCommand}"
+                                                         GroupName="AppThemeGroup"
+                                                         VerticalAlignment="Center"
+                                                         Cursor="Hand" />
+                                        </Grid>
+                                    </Border>
+
+                                    <!-- Botão Tema Verde/Amarelo -->
+                                    <Border Grid.Column="4"
+                                            Background="{DynamicResource SurfaceBrush}"
+                                            BorderThickness="2"
+                                            CornerRadius="8"
+                                            Padding="16,14"
+                                            Cursor="Hand">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="BorderBrush" Value="{DynamicResource BorderDarkBrush}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsGreenYellowTheme}" Value="True">
+                                                        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <Border.InputBindings>
+                                            <MouseBinding Gesture="LeftClick" Command="{Binding SetGreenYellowThemeCommand}" />
+                                        </Border.InputBindings>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0">
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                    <TextBlock Text="🌿 " FontSize="16" VerticalAlignment="Center" />
+                                                    <TextBlock Text="Verde/Amarelo"
+                                                               FontWeight="Bold"
+                                                               FontSize="13"
+                                                               Foreground="{DynamicResource TextPrimaryBrush}"
+                                                               VerticalAlignment="Center" />
+                                                </StackPanel>
+                                                <TextBlock Text="Identidade oficial do CobraPix com verde floresta e detalhes amarelos."
+                                                           FontSize="11"
+                                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                                           TextWrapping="Wrap" />
+                                            </StackPanel>
+                                            <RadioButton Grid.Column="1"
+                                                         IsChecked="{Binding IsGreenYellowTheme, Mode=OneWay}"
+                                                         Command="{Binding SetGreenYellowThemeCommand}"
                                                          GroupName="AppThemeGroup"
                                                          VerticalAlignment="Center"
                                                          Cursor="Hand" />
@@ -1084,6 +1319,89 @@
                                         </StackPanel>
                                         <TextBlock Grid.Column="1" Text="✅ Integridade Verificada" FontSize="11" Foreground="{DynamicResource AccentBrush}" FontWeight="SemiBold" VerticalAlignment="Center" />
                                     </Grid>
+                                </Border>
+
+                                <!-- ======================================================== -->
+                                <!-- CARD DE BACKUP AUTOMÁTICO DIÁRIO (Fase 6)                 -->
+                                <!-- ======================================================== -->
+                                <Border Background="{DynamicResource SurfaceBrush}"
+                                        BorderBrush="{DynamicResource BorderDarkBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="6"
+                                        Padding="16,14"
+                                        Margin="0,0,0,16">
+                                    <StackPanel>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Text="🔄 Backup Automático Diário"
+                                                           FontSize="13"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource TextPrimaryBrush}" />
+                                                <TextBlock Text="Gera automaticamente no máximo 1 backup por dia em segundo plano, sem bloquear o uso."
+                                                           FontSize="11"
+                                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                                           Margin="0,3,0,0" />
+                                            </StackPanel>
+
+                                            <!-- Toggle / CheckBox de Ativação -->
+                                            <CheckBox Grid.Column="1"
+                                                      IsChecked="{Binding AutoBackupEnabled, Mode=TwoWay}"
+                                                      Content="Ativado"
+                                                      FontWeight="SemiBold"
+                                                      Foreground="{DynamicResource TextPrimaryBrush}"
+                                                      VerticalAlignment="Center"
+                                                      Cursor="Hand" />
+                                        </Grid>
+
+                                        <Border Height="1" Background="{DynamicResource BorderDarkBrush}" Margin="0,10,0,10" />
+
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Text="Status do Backup Automático:"
+                                                           FontSize="11"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource TextMutedBrush}" />
+                                                <TextBlock Text="{Binding LastAutoBackupInfo}"
+                                                           FontSize="12"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource AccentBrush}"
+                                                           Margin="0,2,0,0" />
+                                            </StackPanel>
+
+                                            <Button Grid.Column="1"
+                                                    Command="{Binding OpenAutoBackupFolderCommand}"
+                                                    Background="Transparent"
+                                                    BorderBrush="{DynamicResource BorderDarkBrush}"
+                                                    BorderThickness="1"
+                                                    Padding="10,5"
+                                                    Cursor="Hand"
+                                                    VerticalAlignment="Center">
+                                                <Button.Template>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border Background="{TemplateBinding Background}"
+                                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                                CornerRadius="4"
+                                                                Padding="{TemplateBinding Padding}">
+                                                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                        </Border>
+                                                    </ControlTemplate>
+                                                </Button.Template>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="📁 " FontSize="12" VerticalAlignment="Center" />
+                                                    <TextBlock Text="Abrir Pasta de Backups Automáticos" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center" />
+                                                </StackPanel>
+                                            </Button>
+                                        </Grid>
+                                    </StackPanel>
                                 </Border>
 
                                 <!-- Feedback do Backup -->

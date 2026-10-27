@@ -213,11 +213,15 @@ namespace CobraPix_PC.ViewModels
                 var target = param as AtrasadoItemViewModel ?? SelectedAtrasado;
                 if (target == null) return;
 
-                string msg = target.IsParcela
-                    ? _whatsAppService.GenerateParcelaAtrasadaMessage(target.ClientName, target.Reference, target.DueDate, target.RemainingBalance)
-                    : _whatsAppService.GenerateMensalidadeAtrasadaMessage(target.ClientName, target.Reference, target.DueDate, target.RemainingBalance);
+                var bundle = _whatsAppService.BuildOverdueMessageBundle(
+                    target.ClientName,
+                    target.Reference,
+                    target.DueDate,
+                    target.OriginalAmount,
+                    target.TotalPaid,
+                    target.RemainingBalance);
 
-                WhatsAppPreview.Open(target.ClientName, target.ClientPhone, target.TipoBadge, target.FormattedRemainingBalance, msg);
+                WhatsAppPreview.Open(target.ClientName, target.ClientPhone, target.TipoBadge, target.FormattedRemainingBalance, bundle.PrimaryMessage, bundle.IsolatedPixKey);
             });
 
             LoadDataCommand = new RelayCommand(async () => await LoadDataAsync());

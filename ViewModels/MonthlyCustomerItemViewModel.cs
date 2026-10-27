@@ -90,6 +90,10 @@ namespace CobraPix_PC.ViewModels
             }
         }
 
+        public double ContractInterestRate { get; private set; }
+
+        public decimal OriginalMonthlyAmount { get; private set; }
+
         public int DueDay
         {
             get => _dueDay;
@@ -197,6 +201,8 @@ namespace CobraPix_PC.ViewModels
             _dueDay = customer.DueDay;
             _isActive = customer.IsActive;
             _notes = customer.Notes;
+            ContractInterestRate = customer.ContractInterestRate;
+            OriginalMonthlyAmount = customer.OriginalMonthlyAmount > 0 ? customer.OriginalMonthlyAmount : customer.MonthlyAmount;
 
             if (customer.Payments != null && customer.Payments.Count > 0)
             {
@@ -217,6 +223,8 @@ namespace CobraPix_PC.ViewModels
             DueDay = customer.DueDay;
             IsActive = customer.IsActive;
             Notes = customer.Notes;
+            ContractInterestRate = customer.ContractInterestRate;
+            OriginalMonthlyAmount = customer.OriginalMonthlyAmount > 0 ? customer.OriginalMonthlyAmount : customer.MonthlyAmount;
 
             if (customer.Payments != null)
             {

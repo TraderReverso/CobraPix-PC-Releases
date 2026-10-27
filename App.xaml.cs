@@ -69,6 +69,9 @@ namespace CobraPix_PC
             services.AddScoped<IUpdateService, UpdateService>();
             services.AddScoped<IUpdateDownloadService, UpdateDownloadService>();
             services.AddScoped<IExcelExportService, ExcelExportService>();
+            services.AddScoped<IReminderService, ReminderService>();
+            services.AddScoped<IReportExportService, ReportExportService>();
+            services.AddSingleton<IDiagnosticLogger>(DiagnosticLogger.Instance);
 
             // Serviços do Módulo Crédito & Giro (Exclusivo PRO)
             services.AddScoped<ICreditTransactionExecutor, CreditTransactionExecutor>();
@@ -94,6 +97,7 @@ namespace CobraPix_PC
             services.AddTransient<CobraPix_PC.ViewModels.Modules.ProViewModel>();
             services.AddTransient<CobraPix_PC.ViewModels.Modules.HistoricoFinanceiroViewModel>();
             services.AddTransient<CobraPix_PC.ViewModels.Modules.CreditoGiroViewModel>();
+            services.AddTransient<CobraPix_PC.ViewModels.Modules.LembretesViewModel>();
         }
 
         protected override async void OnStartup(StartupEventArgs e)
@@ -104,16 +108,20 @@ namespace CobraPix_PC
             // (manual ou automático pelo Windows).
             // ──────────────────────────────────────────────────────────
             const string mutexName = "Global\\CobraPixPC_SingleInstance";
-            bool isNewInstance;
-            _singleInstanceMutex = new Mutex(initiallyOwned: true, name: mutexName, createdNew: out isNewInstance);
-
-            if (!isNewInstance)
+            bool isTestMode = e.Args.Any(a => a.StartsWith("--test-") || a.StartsWith("--diagnose-db"));
+            bool isNewInstance = false;
+            if (!isTestMode)
             {
-                // Já existe uma instância em execução; encerra silenciosamente
-                _singleInstanceMutex.Dispose();
-                _singleInstanceMutex = null;
-                Environment.Exit(0);
-                return;
+                _singleInstanceMutex = new Mutex(initiallyOwned: true, name: mutexName, createdNew: out isNewInstance);
+
+                if (!isNewInstance)
+                {
+                    // Já existe uma instância em execução; encerra silenciosamente
+                    _singleInstanceMutex.Dispose();
+                    _singleInstanceMutex = null;
+                    Environment.Exit(0);
+                    return;
+                }
             }
 
             // ──────────────────────────────────────────────────────────
@@ -141,8 +149,6 @@ namespace CobraPix_PC
                 Environment.Exit(0);
                 return;
             }
-
-            base.OnStartup(e);
 
             if (e.Args.Length > 0 && e.Args[0] == "--test-enable-start-boot")
             {
@@ -190,7 +196,12 @@ namespace CobraPix_PC
             {
                 try
                 {
-                    string tempDb = Path.Combine(Path.GetTempPath(), "cobrapix_theme_test_" + Guid.NewGuid() + ".db");
+                    if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(DatabasePath.ExecutionModeEnvVar)))
+                        Environment.SetEnvironmentVariable(DatabasePath.ExecutionModeEnvVar, "TEST");
+                    string baseTempDir = Environment.GetEnvironmentVariable(DatabasePath.SandboxRootEnvVar) ?? Path.GetTempPath();
+                    Directory.CreateDirectory(baseTempDir);
+                    string tempDb = Path.Combine(baseTempDir, "cobrapix_theme_test_" + Guid.NewGuid() + ".db");
+                    Environment.SetEnvironmentVariable(DatabasePath.DatabasePathEnvVar, tempDb);
                     var optBuilder = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<CobraPixDbContext>()
                         .UseSqlite($"Data Source={tempDb}");
                     using (var ctxInit = new CobraPixDbContext(optBuilder.Options))
@@ -451,7 +462,12 @@ namespace CobraPix_PC
                     Console.WriteLine("TEST_15_CHAVE_PIX_VAZIA: PASS");
 
                     // 16. Persistência da chave Pix via AppSettings
-                    string tempDb = Path.Combine(Path.GetTempPath(), "cobrapix_pix_test_" + Guid.NewGuid() + ".db");
+                    if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(DatabasePath.ExecutionModeEnvVar)))
+                        Environment.SetEnvironmentVariable(DatabasePath.ExecutionModeEnvVar, "TEST");
+                    string baseTempDir = Environment.GetEnvironmentVariable(DatabasePath.SandboxRootEnvVar) ?? Path.GetTempPath();
+                    Directory.CreateDirectory(baseTempDir);
+                    string tempDb = Path.Combine(baseTempDir, "cobrapix_pix_test_" + Guid.NewGuid() + ".db");
+                    Environment.SetEnvironmentVariable(DatabasePath.DatabasePathEnvVar, tempDb);
                     var optBuilder = new DbContextOptionsBuilder<CobraPixDbContext>()
                         .UseSqlite($"Data Source={tempDb}");
                     using (var ctxInit = new CobraPixDbContext(optBuilder.Options))
@@ -590,7 +606,12 @@ namespace CobraPix_PC
             {
                 try
                 {
-                    string tempDb = Path.Combine(Path.GetTempPath(), "cobrapix_financial_test_" + Guid.NewGuid() + ".db");
+                    if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(DatabasePath.ExecutionModeEnvVar)))
+                        Environment.SetEnvironmentVariable(DatabasePath.ExecutionModeEnvVar, "TEST");
+                    string baseTempDir = Environment.GetEnvironmentVariable(DatabasePath.SandboxRootEnvVar) ?? Path.GetTempPath();
+                    Directory.CreateDirectory(baseTempDir);
+                    string tempDb = Path.Combine(baseTempDir, "cobrapix_financial_test_" + Guid.NewGuid() + ".db");
+                    Environment.SetEnvironmentVariable(DatabasePath.DatabasePathEnvVar, tempDb);
                     var optBuilder = new DbContextOptionsBuilder<CobraPixDbContext>()
                         .UseSqlite($"Data Source={tempDb}");
                     using (var ctxInit = new CobraPixDbContext(optBuilder.Options))
@@ -842,8 +863,9 @@ namespace CobraPix_PC
                         // 10. Comportamento do botão no Histórico Financeiro:
                         //     - se o arquivo já existir, abre;
                         //     - se não existir, gera e abre.
-                        string testPdfDir = Path.Combine(Path.GetTempPath(), "cobrapix_receipts_test_" + Guid.NewGuid());
+                        string testPdfDir = Path.Combine(baseTempDir, "cobrapix_receipts_test_" + Guid.NewGuid());
                         Directory.CreateDirectory(testPdfDir);
+                        Environment.SetEnvironmentVariable(ReceiptPdfService.ReceiptsDirectoryEnvVar, testPdfDir);
                         string customFile = Path.Combine(testPdfDir, "Comprovante_Teste_10.pdf");
 
                         if (File.Exists(customFile)) File.Delete(customFile);
@@ -896,10 +918,17 @@ namespace CobraPix_PC
             {
                 try
                 {
-                    string tempDb = Path.Combine(Path.GetTempPath(), "cobrapix_autobackup_test_" + Guid.NewGuid() + ".db");
-                    string tempAutoDir = Path.Combine(Path.GetTempPath(), "cobrapix_autobackup_dir_" + Guid.NewGuid());
-                    string tempManualDir = Path.Combine(Path.GetTempPath(), "cobrapix_manual_dir_" + Guid.NewGuid());
-                    string tempRestoredDb = Path.Combine(Path.GetTempPath(), "cobrapix_restored_test_" + Guid.NewGuid() + ".db");
+                    if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(DatabasePath.ExecutionModeEnvVar)))
+                        Environment.SetEnvironmentVariable(DatabasePath.ExecutionModeEnvVar, "TEST");
+                    string baseTempDir = Environment.GetEnvironmentVariable(DatabasePath.SandboxRootEnvVar) ?? Path.GetTempPath();
+                    Directory.CreateDirectory(baseTempDir);
+                    string tempDb = Path.Combine(baseTempDir, "cobrapix_autobackup_test_" + Guid.NewGuid() + ".db");
+                    string tempAutoDir = Path.Combine(baseTempDir, "cobrapix_autobackup_dir_" + Guid.NewGuid());
+                    string tempManualDir = Path.Combine(baseTempDir, "cobrapix_manual_dir_" + Guid.NewGuid());
+                    string tempRestoredDb = Path.Combine(baseTempDir, "cobrapix_restored_test_" + Guid.NewGuid() + ".db");
+
+                    Environment.SetEnvironmentVariable(DatabasePath.DatabasePathEnvVar, tempDb);
+                    Environment.SetEnvironmentVariable(BackupService.BackupDirectoryEnvVar, tempAutoDir);
 
                     Directory.CreateDirectory(tempAutoDir);
                     Directory.CreateDirectory(tempManualDir);
@@ -1027,7 +1056,17 @@ namespace CobraPix_PC
                         string invalidDir = "Z:\\caminho_inexistente_impossivel_" + Guid.NewGuid();
                         settingDate.Value = "2026-09-01";
                         await ctx.SaveChangesAsync();
-                        var res9 = await backupSvc.CheckAndPerformDailyAutoBackupAsync(customSourceDb: tempDb, customTargetDir: invalidDir, force: true);
+                        string? savedSandbox = Environment.GetEnvironmentVariable(DatabasePath.SandboxRootEnvVar);
+                        BackupResult? res9;
+                        try
+                        {
+                            Environment.SetEnvironmentVariable(DatabasePath.SandboxRootEnvVar, null);
+                            res9 = await backupSvc.CheckAndPerformDailyAutoBackupAsync(customSourceDb: tempDb, customTargetDir: invalidDir, force: true);
+                        }
+                        finally
+                        {
+                            Environment.SetEnvironmentVariable(DatabasePath.SandboxRootEnvVar, savedSandbox);
+                        }
                         if (res9 == null || res9.Success)
                             throw new Exception("Teste 9: Esperada falha controlada ao gravar em diretório inválido.");
                         var errSetting9 = await ctx.AppSettings.FirstOrDefaultAsync(s => s.Key == BackupService.SettingKeyLastAutoBackupError);
@@ -1065,6 +1104,30 @@ namespace CobraPix_PC
                 return;
             }
 
+            // Suporte a validação automatizada do Módulo Lembretes & Tarefas em ambiente isolado
+            if (e.Args.Length > 0 && e.Args[0] == "--test-reminders")
+            {
+                string logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "reminder_test_result.log");
+                try
+                {
+                    var results = await ReminderTests.RunAllTestsAsync();
+                    File.WriteAllLines(logFile, results);
+                    foreach (var r in results) Console.WriteLine(r);
+                    Environment.ExitCode = 0;
+                }
+                catch (Exception ex)
+                {
+                    File.WriteAllText(logFile, $"ERRO: {ex.Message}\n{ex.StackTrace}");
+                    Console.Error.WriteLine("REMINDER_TEST_FAILED: " + ex.Message + "\n" + ex.StackTrace);
+                    Environment.ExitCode = 1;
+                }
+                finally
+                {
+                    Shutdown(Environment.ExitCode);
+                }
+                return;
+            }
+
             // Suporte a validação automatizada do Módulo Crédito & Giro em ambiente isolado
             if (e.Args.Length > 0 && e.Args[0] == "--test-credit-giro")
             {
@@ -1085,6 +1148,102 @@ namespace CobraPix_PC
                 finally
                 {
                     Shutdown(Environment.ExitCode);
+                }
+                return;
+            }
+
+            // Suporte a validação automatizada de isolamento e segurança em sandbox descartável
+            if (e.Args.Length > 0 && e.Args[0] == "--test-security-isolation")
+            {
+                string logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "security_isolation_test_result.log");
+                try
+                {
+                    string? customSandbox = e.Args.Length > 1 ? e.Args[1] : null;
+                    var results = await CreditGiroTests.RunIsolationSecurityTestsAsync(customSandbox);
+                    File.WriteAllLines(logFile, results);
+                    foreach (var r in results) Console.WriteLine(r);
+                    Environment.ExitCode = 0;
+                }
+                catch (Exception ex)
+                {
+                    File.WriteAllText(logFile, $"ERRO: {ex.Message}\n{ex.StackTrace}");
+                    Console.Error.WriteLine("SECURITY_TEST_FAILED: " + ex.Message + "\n" + ex.StackTrace);
+                    Environment.ExitCode = 1;
+                }
+                finally
+                {
+                    Shutdown(Environment.ExitCode);
+                }
+                return;
+            }
+
+            // Suporte a inicialização controlada de base sintética para homologação da interface WPF
+            if (e.Args.Length > 0 && e.Args[0] == "--init-homolog-sandbox")
+            {
+                try
+                {
+                    string targetDb = e.Args.Length > 1 ? e.Args[1] : (Environment.GetEnvironmentVariable(DatabasePath.DatabasePathEnvVar) ?? "");
+                    if (string.IsNullOrWhiteSpace(targetDb))
+                        throw new InvalidOperationException("Caminho da base de homologação não informado.");
+
+                    targetDb = DatabasePath.AssertSafeTestFilePath(targetDb, "Inicialização de base de homologação");
+
+                    if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(DatabasePath.ExecutionModeEnvVar)))
+                        Environment.SetEnvironmentVariable(DatabasePath.ExecutionModeEnvVar, "TEST");
+                    if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(DatabasePath.AllowTestDbEnvVar)))
+                        Environment.SetEnvironmentVariable(DatabasePath.AllowTestDbEnvVar, "1");
+
+                    Environment.SetEnvironmentVariable(DatabasePath.DatabasePathEnvVar, targetDb);
+
+                    var optBuilder = new DbContextOptionsBuilder<CobraPixDbContext>()
+                        .UseSqlite($"Data Source={targetDb}");
+
+                    using (var ctx = new CobraPixDbContext(optBuilder.Options))
+                    {
+                        await ctx.Database.EnsureCreatedAsync();
+
+                        string sessionToken = Environment.GetEnvironmentVariable("COBRAPIX_SYNTHETIC_TEST_TOKEN") ?? Guid.NewGuid().ToString("N");
+                        Environment.SetEnvironmentVariable("COBRAPIX_SYNTHETIC_TEST_TOKEN", sessionToken);
+
+                        void UpsertSetting(string key, string val)
+                        {
+                            var s = ctx.AppSettings.FirstOrDefault(x => x.Key == key);
+                            if (s == null) ctx.AppSettings.Add(new AppSetting { Key = key, Value = val });
+                            else s.Value = val;
+                        }
+
+                        UpsertSetting("DatabaseEnvironment", "SYNTHETIC_TEST");
+                        UpsertSetting("SyntheticSessionToken", sessionToken);
+                        UpsertSetting("Pro.PlanType", "Pro");
+                        UpsertSetting("Pro.ActivationSource", "Test");
+                        await ctx.SaveChangesAsync();
+
+                        if (!ctx.Clients.Any())
+                        {
+                            ctx.Clients.Add(new Client
+                            {
+                                Name = "Vitor0 - Cliente Teste Sintético",
+                                Phone = "11988887777",
+                                Notes = "Cliente para homologação visual do módulo Crédito & Giro",
+                                CreatedAt = DateTime.UtcNow
+                            });
+                            await ctx.SaveChangesAsync();
+                        }
+
+                        await CobraPix_PC.Data.Credit.CreditDatabaseMigrator.ApplyCreditMigrationsAsync(ctx);
+                    }
+
+                    Console.WriteLine($"HOMOLOG_SANDBOX_INITIALIZED:{targetDb}");
+                    Environment.ExitCode = 0;
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine("INIT_SANDBOX_FAILED: " + ex.Message);
+                    Environment.ExitCode = 1;
+                }
+                finally
+                {
+                    Environment.Exit(Environment.ExitCode);
                 }
                 return;
             }
@@ -1512,7 +1671,37 @@ namespace CobraPix_PC
             }
 
             // Garante que o diretório em %LOCALAPPDATA%\CobraPix e o banco SQLite existam
+            // Suporte a validação automatizada de Paridade Funcional Android 1.0.6 em ambiente isolado
+            if (e.Args.Length > 0 && e.Args[0] == "--test-parity")
+            {
+                string logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "parity_test_results.log");
+                try
+                {
+                    var results = await ParityTests.RunAllTestsAsync();
+                    File.WriteAllLines(logFile, results);
+                    foreach (var line in results)
+                    {
+                        Console.WriteLine(line);
+                    }
+                    Console.WriteLine("ALL_PARITY_TESTS_PASSED");
+                    Environment.ExitCode = 0;
+                }
+                catch (Exception ex)
+                {
+                    File.WriteAllText(logFile, $"ERRO: {ex.Message}\n{ex.StackTrace}");
+                    Console.Error.WriteLine("PARITY_TEST_FAILED: " + ex.Message);
+                    Environment.ExitCode = 1;
+                }
+                finally
+                {
+                    Environment.Exit(Environment.ExitCode);
+                }
+                return;
+            }
+
             DatabaseInitializer.Initialize();
+
+            base.OnStartup(e);
 
             // Aplica o tema configurado nas preferências locais
             try
@@ -1550,14 +1739,14 @@ namespace CobraPix_PC
                     {
                         notificationTimer.Interval = TimeSpan.FromMilliseconds(500);
                     }
-                    else if (delay <= TimeSpan.FromMinutes(2))
+                    else if (delay < TimeSpan.FromSeconds(15))
                     {
-                        // Menos de 2 minutos para o próximo horário: programa o tick exatamente no segundo do slot
+                        // Menos de 15 segundos para o próximo horário programado: alinha com o segundo exato
                         notificationTimer.Interval = delay < TimeSpan.FromMilliseconds(500) ? TimeSpan.FromMilliseconds(500) : delay;
                     }
                     else
                     {
-                        // Mais de 2 minutos: timer intermediário de 15 segundos sem consulta pesada ao banco
+                        // Ciclo contínuo de 15 segundos: garante detecção em tempo real de novos lembretes na sessão aberta
                         notificationTimer.Interval = TimeSpan.FromSeconds(15);
                     }
                 }

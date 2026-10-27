@@ -47,11 +47,26 @@
                                    FontSize="11"
                                    Foreground="#000000" />
                     </Border>
+                    <Border Background="{Binding EnvironmentBadgeBackground}"
+                            CornerRadius="6"
+                            Padding="8,2"
+                            Margin="8,0,0,0"
+                            VerticalAlignment="Center">
+                        <TextBlock Text="{Binding EnvironmentBadgeText}"
+                                   FontWeight="Bold"
+                                   FontSize="11"
+                                   Foreground="{Binding EnvironmentBadgeForeground}" />
+                    </Border>
                 </StackPanel>
                 <TextBlock Text="Gestão integral de capital de giro, contratos, amortizações sob Regra A e devoluções em duas fases."
                            FontSize="13"
                            Foreground="{DynamicResource TextSecondaryBrush}"
                            Margin="0,4,0,0" />
+                <TextBlock Text="{Binding ActiveDatabaseDisplay, StringFormat='Base de Dados: {0}'}"
+                           FontSize="11"
+                           FontFamily="Consolas"
+                           Foreground="{DynamicResource TextSecondaryBrush}"
+                           Margin="0,2,0,0" />
             </StackPanel>
 
             <Button Grid.Column="1"
@@ -77,7 +92,7 @@
                     CornerRadius="8"
                     Padding="12,8"
                     Margin="0,0,0,8"
-                    Visibility="{Binding ErrorMessage, Converter={StaticResource BoolToVis}}">
+                    Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}">
                 <TextBlock Text="{Binding ErrorMessage}"
                            Foreground="#FCA5A5"
                            FontWeight="SemiBold"
@@ -92,7 +107,7 @@
                     CornerRadius="8"
                     Padding="12,8"
                     Margin="0,0,0,8"
-                    Visibility="{Binding SuccessMessage, Converter={StaticResource BoolToVis}}">
+                    Visibility="{Binding HasSuccess, Converter={StaticResource BoolToVis}}">
                 <TextBlock Text="{Binding SuccessMessage}"
                            Foreground="#6EE7B7"
                            FontWeight="SemiBold"
@@ -213,6 +228,27 @@
                                     </StackPanel>
                                 </Grid>
 
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,4,0">
+                                        <TextBlock Text="Periodicidade:" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                        <ComboBox ItemsSource="{Binding AvailablePeriodicities}"
+                                                  SelectedItem="{Binding NewPeriodicity}"
+                                                  Height="30"
+                                                  Margin="0,4,0,0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Margin="4,0,0,0">
+                                        <TextBlock Text="Dias (Personalizado):" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                        <TextBox Text="{Binding NewCustomIntervalDays, UpdateSourceTrigger=PropertyChanged}"
+                                                 IsEnabled="{Binding IsCustomPeriodicity}"
+                                                 Height="30"
+                                                 Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </Grid>
+
                                 <TextBlock Text="Data do Contrato:" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
                                 <DatePicker SelectedDate="{Binding NewContractDate}" Height="30" Margin="0,4,0,10" />
 
@@ -257,9 +293,10 @@
                                     <DataGridTextColumn Header="Número" Binding="{Binding ContractNumber}" Width="110" />
                                     <DataGridTextColumn Header="Cliente" Binding="{Binding Client.Name}" Width="140" />
                                     <DataGridTextColumn Header="Data" Binding="{Binding ContractDate, StringFormat='{}{0:dd/MM/yyyy}'}" Width="90" />
-                                    <DataGridTextColumn Header="Principal" Binding="{Binding DisbursedPrincipalCents, ConverterParameter=cents}" Width="100" />
-                                    <DataGridTextColumn Header="Juros" Binding="{Binding TotalNominalInterestCents, ConverterParameter=cents}" Width="90" />
-                                    <DataGridTextColumn Header="Total" Binding="{Binding TotalAmountCents, ConverterParameter=cents}" Width="100" />
+                                    <DataGridTextColumn Header="Periodicidade" Binding="{Binding Periodicity}" Width="100" />
+                                    <DataGridTextColumn Header="Principal" Binding="{Binding FormattedDisbursedPrincipal}" Width="100" />
+                                    <DataGridTextColumn Header="Juros" Binding="{Binding FormattedTotalNominalInterest}" Width="90" />
+                                    <DataGridTextColumn Header="Total" Binding="{Binding FormattedTotalAmount}" Width="100" />
                                     <DataGridTextColumn Header="Situação" Binding="{Binding Status}" Width="110" />
                                 </DataGrid.Columns>
                             </DataGrid>
@@ -358,8 +395,18 @@
                                            Foreground="{DynamicResource TextPrimaryBrush}"
                                            Margin="0,0,0,12" />
 
-                                <TextBlock Text="ID do Contrato:" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
-                                <TextBox Text="{Binding PaymentContractId, UpdateSourceTrigger=PropertyChanged}" Height="30" Margin="0,4,0,10" />
+                                <TextBlock Text="Selecionar Contrato:" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                <ComboBox ItemsSource="{Binding Contracts}"
+                                          SelectedItem="{Binding SelectedPaymentContract}"
+                                          DisplayMemberPath="DisplaySummary"
+                                          Height="32"
+                                          Margin="0,4,0,8" />
+
+                                <TextBlock Text="Ou Código / Número / ID do Contrato:" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                <TextBox Text="{Binding PaymentContractId, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="Informe o número do contrato (ex: 1), nome do cliente ou GUID"
+                                         Height="30"
+                                         Margin="0,4,0,10" />
 
                                 <Grid Margin="0,0,0,10">
                                     <Grid.ColumnDefinitions>
@@ -432,7 +479,7 @@
                                 <DataGridTextColumn Header="Data" Binding="{Binding PaymentDate, StringFormat='{}{0:dd/MM/yyyy}'}" Width="90" />
                                 <DataGridTextColumn Header="Contrato" Binding="{Binding Contract.ContractNumber}" Width="120" />
                                 <DataGridTextColumn Header="Cliente" Binding="{Binding Contract.Client.Name}" Width="140" />
-                                <DataGridTextColumn Header="Valor (Centavos)" Binding="{Binding AmountCents}" Width="110" />
+                                <DataGridTextColumn Header="Valor Pago" Binding="{Binding FormattedAmount}" Width="110" />
                                 <DataGridTextColumn Header="Situação" Binding="{Binding Status}" Width="130" />
                                 <DataGridTextColumn Header="Alocações" Binding="{Binding Allocations.Count}" Width="80" />
                             </DataGrid.Columns>
@@ -470,8 +517,8 @@
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="Contrato" Binding="{Binding Contract.ContractNumber}" Width="120" />
                                 <DataGridTextColumn Header="Cliente" Binding="{Binding Contract.Client.Name}" Width="140" />
-                                <DataGridTextColumn Header="Original (Cents)" Binding="{Binding OriginalSurplusCents}" Width="120" />
-                                <DataGridTextColumn Header="Disponível (Cents)" Binding="{Binding RemainingSurplusCents}" Width="120" />
+                                <DataGridTextColumn Header="Original" Binding="{Binding FormattedOriginalSurplus}" Width="120" />
+                                <DataGridTextColumn Header="Disponível" Binding="{Binding FormattedRemainingSurplus}" Width="120" />
                                 <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="120" />
                                 <DataGridTextColumn Header="Consumos" Binding="{Binding Consumptions.Count}" Width="80" />
                             </DataGrid.Columns>

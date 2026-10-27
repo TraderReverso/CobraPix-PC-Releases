@@ -19,9 +19,11 @@ namespace CobraPix_PC.ViewModels
         public PaymentMethod PaymentMethod { get; }
         public string? Notes { get; }
 
+        public bool IsRefund => AmountPaid < 0m || (Notes != null && Notes.StartsWith("[ESTORNO:"));
         public string FormattedDate => PaymentDate.ToString("dd/MM/yyyy HH:mm");
-        public string FormattedAmount => AmountPaid.ToString("C2", PtBr);
-        public string MethodText => PaymentMethod switch
+        public string FormattedAmount => IsRefund ? $"- {Math.Abs(AmountPaid).ToString("C2", PtBr)}" : $"+ {AmountPaid.ToString("C2", PtBr)}";
+        public string AmountForeground => IsRefund ? "#F87171" : "#10B981";
+        public string MethodText => IsRefund ? "ESTORNO" : PaymentMethod switch
         {
             PaymentMethod.Pix => "PIX",
             PaymentMethod.Cash => "Dinheiro",

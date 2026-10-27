@@ -12,13 +12,15 @@ namespace CobraPix_PC.Services.Interfaces
             decimal monthlyAmount,
             int dueDay,
             DateTime startDate,
-            string? notes = null);
+            string? notes = null,
+            double contractInterestRate = 0.0);
 
         Task<MonthlyCustomer> UpdateMonthlyCustomerAsync(
             int id,
             decimal monthlyAmount,
             int dueDay,
-            string? notes = null);
+            string? notes = null,
+            double contractInterestRate = 0.0);
 
         Task<bool> SetStatusAsync(int id, bool isActive);
 
@@ -36,5 +38,6 @@ namespace CobraPix_PC.Services.Interfaces
         Task<List<MonthlyCustomer>> GetAllMonthlyCustomersAsync();
         Task<List<MonthlyCustomer>> GetActiveMonthlyCustomersAsync();
         Task<List<MonthlyPayment>> GetPaymentsByMonthlyCustomerAsync(int monthlyCustomerId);
+        Task<bool> DeleteMonthlyPaymentAsync(int paymentId);
     }
 }

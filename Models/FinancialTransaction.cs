@@ -11,6 +11,7 @@ namespace CobraPix_PC.Models
     /// <summary>
     /// Modelo unificado que representa uma transação financeira de entrada (recebimento efetivo),
     /// seja ela originada de pagamento de parcela ou de mensalidade.
+    /// Inclui campos de paridade funcional para exibição de demonstrativo global e juros no recibo.
     /// </summary>
     public class FinancialTransaction
     {
@@ -45,6 +46,40 @@ namespace CobraPix_PC.Models
         public int? ReferenceYear { get; set; }
 
         public string Reference { get; set; } = string.Empty;
+
+        public decimal? OriginalAmount { get; set; }
+
+        public decimal? TotalPaid { get; set; }
+
+        public decimal? RemainingBalance { get; set; }
+
+        // Campos de Paridade Funcional Android para Comprovantes e Recibos
+        public decimal? GlobalInitialDebt { get; set; }
+
+        public decimal? GlobalTotalPaid { get; set; }
+
+        public decimal? GlobalRemainingBalance { get; set; }
+
+        public decimal? ContractInterest { get; set; }
+
+        public decimal? OverdueInterest { get; set; }
+
+        public decimal? OriginalPrincipal { get; set; }
+
+        public decimal? UnpaidPrincipal { get; set; }
+
+        public string? ReceiverName { get; set; }
+
+        public string? PixKey { get; set; }
+
+        // Campos de Estorno e Rastreabilidade Financeira
+        public bool IsRefund { get; set; }
+
+        public bool IsRefunded { get; set; }
+
+        public decimal? RefundedAmount { get; set; }
+
+        public int? OriginalPaymentId { get; set; }
     }
 
     /// <summary>

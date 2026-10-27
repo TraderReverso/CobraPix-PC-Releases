@@ -247,23 +247,26 @@ namespace CobraPix_PC.ViewModels
                 if (target == null) return;
 
                 string msg;
+                string? isolatedPix = null;
                 if (target.Status == "Atrasada")
                 {
-                    if (target.IsParcela)
-                    {
-                        msg = _whatsAppService.GenerateParcelaAtrasadaMessage(target.ClientName, target.Reference, target.DueDate, target.RemainingBalance);
-                    }
-                    else
-                    {
-                        msg = _whatsAppService.GenerateMensalidadeAtrasadaMessage(target.ClientName, target.Reference, target.DueDate, target.RemainingBalance);
-                    }
+                    var bundle = _whatsAppService.BuildOverdueMessageBundle(
+                        target.ClientName,
+                        target.Reference,
+                        target.DueDate,
+                        target.OriginalAmount,
+                        target.TotalPaid,
+                        target.RemainingBalance);
+                    msg = bundle.PrimaryMessage;
+                    isolatedPix = bundle.IsolatedPixKey;
                 }
                 else
                 {
-                    msg = _whatsAppService.GenerateVencimentoProximoMessage(target.ClientName, target.Reference, target.DueDate, target.RemainingBalance);
+                    msg = _whatsAppService.GenerateVencimentoProximoMessage(target.ClientName, target.Reference, target.DueDate, target.OriginalAmount, target.TotalPaid, target.RemainingBalance);
+                    isolatedPix = _whatsAppService.PixKey;
                 }
 
-                WhatsAppPreview.Open(target.ClientName, target.ClientPhone, target.TipoBadge, target.FormattedRemainingBalance, msg);
+                WhatsAppPreview.Open(target.ClientName, target.ClientPhone, target.TipoBadge, target.FormattedRemainingBalance, msg, isolatedPix);
             });
 
             LoadDataCommand = new RelayCommand(async () => await LoadDataAsync());
@@ -363,8 +366,7 @@ namespace CobraPix_PC.ViewModels
                     decimal balance = inst.Amount - paid;
                     if (balance <= 0m) continue;
 
-                    bool isFifthBusinessDay = (inst.DueDate.Date == currentFifthBusinessDay.Date) ||
-                                              (inst.DueDate.Date == nextFifthBusinessDay.Date) ||
+                    bool isFifthBusinessDay = (inst.DueDate.Date == targetFifth.Date) ||
                                               (inst.Notes != null && (inst.Notes.Contains("5º dia útil", StringComparison.OrdinalIgnoreCase) ||
                                                                       inst.Notes.Contains("5º dia util", StringComparison.OrdinalIgnoreCase) ||
                                                                       inst.Notes.Contains("quinto dia util", StringComparison.OrdinalIgnoreCase)));

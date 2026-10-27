@@ -35,6 +35,50 @@ namespace CobraPix_PC.ViewModels.Modules
         };
     }
 
+    public class UpcomingCobrancaItemViewModel
+    {
+        public string ClientName { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public DateTime DueDate { get; set; }
+        public decimal Amount { get; set; }
+        public bool IsOverdue => DueDate.Date < DateTime.Today;
+        public bool IsToday => DueDate.Date == DateTime.Today;
+        public string FormattedAmount => Amount.ToString("C2");
+        public string FormattedDueDate => DueDate.Date == DateTime.Today
+            ? "Hoje"
+            : (DueDate.Date == DateTime.Today.AddDays(1) ? "Amanhã" : DueDate.ToString("dd/MM/yyyy"));
+        public string BadgeText => IsOverdue ? "ATRASADO" : (IsToday ? "HOJE" : "A VENCER");
+        public string BadgeBackground => IsOverdue ? "#2A1515" : (IsToday ? "#2A2315" : "#14253D");
+        public string BadgeForeground => IsOverdue ? "#EF4444" : (IsToday ? "#F59E0B" : "#38BDF8");
+    }
+
+    public class ReminderItemSummaryViewModel
+    {
+        public int Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public DateTime? DueDate { get; set; }
+        public ReminderPriority Priority { get; set; }
+        public bool IsOverdue => DueDate.HasValue && DueDate.Value < DateTime.Now;
+        public bool IsToday => DueDate.HasValue && DueDate.Value.Date == DateTime.Today;
+        public string FormattedDueDate => DueDate.HasValue ? DueDate.Value.ToString("dd/MM HH:mm") : "Sem prazo";
+        public string PriorityLabel => Priority switch
+        {
+            ReminderPriority.Low => "Baixa",
+            ReminderPriority.Normal => "Normal",
+            ReminderPriority.High => "Alta",
+            ReminderPriority.Urgent => "Urgente",
+            _ => "Normal"
+        };
+        public string PriorityColor => Priority switch
+        {
+            ReminderPriority.Low => "#10B981",
+            ReminderPriority.Normal => "#3B82F6",
+            ReminderPriority.High => "#F59E0B",
+            ReminderPriority.Urgent => "#EF4444",
+            _ => "#3B82F6"
+        };
+    }
+
     /// <summary>
     /// ViewModel do Dashboard Geral do CobraPix PC.
     /// Consolida métricas de clientes, vendas, parcelas abertas, atrasadas, mensalistas e pagamentos recentes.
@@ -43,6 +87,7 @@ namespace CobraPix_PC.ViewModels.Modules
     {
         private readonly CobraPixDbContext _context;
         private readonly IProService _proService;
+        private readonly IReminderService? _reminderService;
         private readonly Action<string>? _navigateToModule;
 
         private bool _isLoading;
@@ -278,6 +323,27 @@ namespace CobraPix_PC.ViewModels.Modules
 
         public bool HasRecentPayments => RecentPayments.Count > 0;
 
+        // Métricas de Lembretes & Tarefas
+        private int _todayRemindersCount;
+        public int TodayRemindersCount
+        {
+            get => _todayRemindersCount;
+            set => SetProperty(ref _todayRemindersCount, value);
+        }
+
+        private int _overdueRemindersCount;
+        public int OverdueRemindersCount
+        {
+            get => _overdueRemindersCount;
+            set => SetProperty(ref _overdueRemindersCount, value);
+        }
+
+        public ObservableCollection<UpcomingCobrancaItemViewModel> UpcomingCobrancas { get; } = new();
+        public bool HasUpcomingCobrancas => UpcomingCobrancas.Count > 0;
+
+        public ObservableCollection<ReminderItemSummaryViewModel> UrgentReminders { get; } = new();
+        public bool HasUrgentReminders => UrgentReminders.Count > 0;
+
         // Comandos
         public ICommand LoadDataCommand { get; }
         public ICommand NavigateToClientsCommand { get; }
@@ -291,23 +357,28 @@ namespace CobraPix_PC.ViewModels.Modules
         public ICommand NavigateToArquivadosCommand { get; }
         public ICommand NavigateToRankingCommand { get; }
         public ICommand NavigateToHistoricoCommand { get; }
+        public ICommand NavigateToRemindersCommand { get; }
+        public ICommand NavigateToConfigCommand { get; }
 
         public DashboardViewModel()
             : this(
                 App.Services?.GetService<CobraPixDbContext>() ?? new CobraPixDbContext(),
                 App.Services?.GetService<IProService>() ?? new ProService(new CobraPixDbContext()),
-                null)
+                null,
+                App.Services?.GetService<IReminderService>())
         {
         }
 
         public DashboardViewModel(
             CobraPixDbContext context,
             IProService proService,
-            Action<string>? navigateToModule = null)
+            Action<string>? navigateToModule = null,
+            IReminderService? reminderService = null)
         {
             _context = context ?? throw new ArgumentNullException(nameof(context));
             _proService = proService ?? throw new ArgumentNullException(nameof(proService));
             _navigateToModule = navigateToModule;
+            _reminderService = reminderService ?? App.Services?.GetService<IReminderService>();
 
             LoadDataCommand = new RelayCommand(async () => await LoadDataAsync());
             NavigateToClientsCommand = new RelayCommand(() => _navigateToModule?.Invoke("Clientes"));
@@ -321,6 +392,8 @@ namespace CobraPix_PC.ViewModels.Modules
             NavigateToArquivadosCommand = new RelayCommand(() => _navigateToModule?.Invoke("Arquivados"));
             NavigateToRankingCommand = new RelayCommand(() => _navigateToModule?.Invoke("Ranqueamento"));
             NavigateToHistoricoCommand = new RelayCommand(() => _navigateToModule?.Invoke("Histórico Financeiro"));
+            NavigateToRemindersCommand = new RelayCommand(() => _navigateToModule?.Invoke("Lembretes"));
+            NavigateToConfigCommand = new RelayCommand(() => _navigateToModule?.Invoke("Configurações"));
 
             _ = LoadDataAsync();
         }
@@ -346,6 +419,8 @@ namespace CobraPix_PC.ViewModels.Modules
                 var allInstallments = await _context.Installments
                     .AsNoTracking()
                     .Include(i => i.Payments)
+                    .Include(i => i.Sale)
+                        .ThenInclude(s => s.Client)
                     .ToListAsync();
 
                 // Parcelas pagas (quantidade de parcelas com status Paid)
@@ -376,6 +451,7 @@ namespace CobraPix_PC.ViewModels.Modules
                 var allMonthly = await _context.MonthlyCustomers
                     .AsNoTracking()
                     .Include(m => m.Payments)
+                    .Include(m => m.Client)
                     .ToListAsync();
 
                 var activeMonthly = allMonthly.Where(m => m.IsActive).ToList();
@@ -453,6 +529,74 @@ namespace CobraPix_PC.ViewModels.Modules
                 }
 
                 OnPropertyChanged(nameof(HasRecentPayments));
+
+                // 5. Próximas cobranças (parcelas e mensalidades a vencer ou hoje)
+                UpcomingCobrancas.Clear();
+                var upcomingList = new List<UpcomingCobrancaItemViewModel>();
+
+                foreach (var inst in openInst)
+                {
+                    decimal remaining = Math.Max(0m, inst.Amount - (inst.Payments?.Sum(p => p.AmountPaid) ?? 0m));
+                    if (remaining > 0)
+                    {
+                        string clientName = inst.Sale?.Client?.Name ?? "Cliente";
+                        upcomingList.Add(new UpcomingCobrancaItemViewModel
+                        {
+                            ClientName = clientName,
+                            Description = $"Parcela {inst.InstallmentNumber} - Venda #{inst.SaleId}",
+                            DueDate = inst.DueDate,
+                            Amount = remaining
+                        });
+                    }
+                }
+
+                foreach (var m in pendingMonthly)
+                {
+                    string clientName = m.Client?.Name ?? "Mensalista";
+                    DateTime dueThisMonth = new DateTime(today.Year, today.Month, Math.Min(m.DueDay, DateTime.DaysInMonth(today.Year, today.Month)));
+                    upcomingList.Add(new UpcomingCobrancaItemViewModel
+                    {
+                        ClientName = clientName,
+                        Description = $"Mensalidade {today.Month:D2}/{today.Year}",
+                        DueDate = dueThisMonth,
+                        Amount = m.MonthlyAmount
+                    });
+                }
+
+                foreach (var item in upcomingList.OrderBy(u => u.DueDate).Take(5))
+                {
+                    UpcomingCobrancas.Add(item);
+                }
+                OnPropertyChanged(nameof(HasUpcomingCobrancas));
+
+                // 6. Lembretes & Tarefas de Hoje e Atrasados
+                UrgentReminders.Clear();
+                if (_reminderService != null)
+                {
+                    var reminderSummary = await _reminderService.GetSummaryAsync();
+                    TodayRemindersCount = reminderSummary.TodayCount;
+                    OverdueRemindersCount = reminderSummary.OverdueCount;
+
+                    var pendingReminders = await _reminderService.GetAllRemindersAsync(status: ReminderStatus.Pending);
+                    var urgent = pendingReminders
+                        .Where(r => r.IsOverdue || r.IsToday)
+                        .OrderByDescending(r => r.Priority)
+                        .ThenBy(r => r.DueDate ?? DateTime.MaxValue)
+                        .Take(5)
+                        .ToList();
+
+                    foreach (var r in urgent)
+                    {
+                        UrgentReminders.Add(new ReminderItemSummaryViewModel
+                        {
+                            Id = r.Id,
+                            Title = r.Title,
+                            DueDate = r.DueDate,
+                            Priority = r.Priority
+                        });
+                    }
+                }
+                OnPropertyChanged(nameof(HasUrgentReminders));
 
                 // Indicador de banco vazio
                 IsEmpty = TotalClientsCount == 0 && allInstallments.Count == 0 && allMonthly.Count == 0;

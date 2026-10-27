@@ -71,3 +71,8 @@ CobraPix.LicenseGenerator/keys/
 keys/
 *license_private*
 
+# Backup directories and temporary test snapshots
+_backup*/
+installer/cobrapix-setup-*.iss
+!installer/cobrapix-setup.iss
+

@@ -37,5 +37,32 @@ namespace CobraPix_PC.Services.Interfaces
         /// <param name="backupFilePath">Caminho do arquivo .cpb a ser restaurado.</param>
         /// <param name="targetDatabasePath">Caminho opcional do banco de destino (útil para testes isolados).</param>
         Task<RestoreResult> RestoreBackupAsync(string backupFilePath, string? targetDatabasePath = null);
+
+        /// <summary>
+        /// Retorna o caminho do diretório exclusivo para backups automáticos (%LOCALAPPDATA%\CobraPix\auto_backups).
+        /// </summary>
+        string GetAutoBackupDirectory();
+
+        /// <summary>
+        /// Indica se a rotina de backup automático diário está ativada nas configurações.
+        /// </summary>
+        Task<bool> IsAutoBackupEnabledAsync();
+
+        /// <summary>
+        /// Salva a preferência de ativação ou desativação do backup automático diário.
+        /// </summary>
+        Task SetAutoBackupEnabledAsync(bool enabled);
+
+        /// <summary>
+        /// Retorna a data (yyyy-MM-dd) ou informações resumidas do último backup automático diário realizado.
+        /// </summary>
+        Task<string?> GetLastAutoBackupInfoAsync();
+
+        /// <summary>
+        /// Verifica se já existe um backup automático válido realizado na data atual.
+        /// Se não existir e o recurso estiver ativado, realiza o backup de forma segura e não bloqueante.
+        /// Retorna o resultado da operação, ou null se a execução foi dispensada por já existir backup do dia ou estar desativado.
+        /// </summary>
+        Task<BackupResult?> CheckAndPerformDailyAutoBackupAsync(string? customSourceDb = null, string? customTargetDir = null, bool force = false);
     }
 }

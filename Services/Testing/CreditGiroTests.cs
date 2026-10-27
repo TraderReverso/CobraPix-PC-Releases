@@ -1,9 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Win32;
 using CobraPix_PC.Data;
 using CobraPix_PC.Data.Credit;
 using CobraPix_PC.Models;
@@ -12,6 +15,7 @@ using CobraPix_PC.Models.Credit.Dtos;
 using CobraPix_PC.Services;
 using CobraPix_PC.Services.Credit;
 using CobraPix_PC.Services.Exceptions;
+using CobraPix_PC.ViewModels;
 using CobraPix_PC.ViewModels.Modules;
 
 namespace CobraPix_PC.Services.Testing
@@ -26,17 +30,16 @@ namespace CobraPix_PC.Services.Testing
         public static async Task<System.Collections.Generic.List<string>> RunAllTestsAsync()
         {
             var results = new System.Collections.Generic.List<string>();
-            string tempDbPath = Path.Combine(Path.GetTempPath(), $"cobrapix_credit_test_{Guid.NewGuid():N}.db");
+            string? sandboxRoot = Environment.GetEnvironmentVariable(DatabasePath.SandboxRootEnvVar);
+            string baseTempDir = !string.IsNullOrWhiteSpace(sandboxRoot) ? sandboxRoot.Trim() : Path.GetTempPath();
+            Directory.CreateDirectory(baseTempDir);
+            string tempDbPath = Path.Combine(baseTempDir, $"cobrapix_credit_test_{Guid.NewGuid():N}.db");
             var connectionString = $"Data Source={tempDbPath}";
+            string? previousDbPathEnv = Environment.GetEnvironmentVariable(DatabasePath.DatabasePathEnvVar);
 
             try
             {
-                var options = new DbContextOptionsBuilder<CobraPixDbContext>()
-                    .UseSqlite(connectionString)
-                    .Options;
-
-                results.Add("INICIANDO SUÍTE DE TESTES: CRÉDITO & GIRO (ETAPA 1)");
-                results.Add($"Ambiente Isolado: {tempDbPath}");
+                Environment.SetEnvironmentVariable(DatabasePath.DatabasePathEnvVar, tempDbPath);
 
                 // Garante que o ambiente de teste esteja devidamente declarado
                 if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("COBRAPIX_ALLOW_TEST_DATABASE")))
@@ -46,6 +49,13 @@ namespace CobraPix_PC.Services.Testing
 
                 string sessionToken = Environment.GetEnvironmentVariable("COBRAPIX_SYNTHETIC_TEST_TOKEN") ?? Guid.NewGuid().ToString("N");
                 Environment.SetEnvironmentVariable("COBRAPIX_SYNTHETIC_TEST_TOKEN", sessionToken);
+
+                var options = new DbContextOptionsBuilder<CobraPixDbContext>()
+                    .UseSqlite(connectionString)
+                    .Options;
+
+                results.Add("INICIANDO SUÍTE DE TESTES: CRÉDITO & GIRO (ETAPA 1)");
+                results.Add($"Ambiente Isolado: {tempDbPath}");
 
                 // -------------------------------------------------------------
                 // TESTE 1: Migração Isolada e Preservação do Banco Legado
@@ -178,18 +188,18 @@ namespace CobraPix_PC.Services.Testing
                     if (installments.Count != 3)
                         throw new Exception("TESTE 3 FALHOU: Esperado 3 parcelas no banco.");
 
-                    // Parcela 1: 3.334 principal + 1.001 juros = 4.335 total
+                    // Parcela 1: 3.334 principal + 1.000 juros = 4.334 total
                     if (installments[0].NominalPrincipalCents != 3334 ||
-                        installments[0].NominalInterestCents != 1001 ||
-                        installments[0].TotalAmountCents != 4335)
+                        installments[0].NominalInterestCents != 1000 ||
+                        installments[0].TotalAmountCents != 4334)
                     {
                         throw new Exception($"TESTE 3 FALHOU na Parcela 1: P={installments[0].NominalPrincipalCents}, J={installments[0].NominalInterestCents}, T={installments[0].TotalAmountCents}");
                     }
 
-                    // Parcela 2: 3.333 principal + 1.000 juros = 4.333 total
+                    // Parcela 2: 3.333 principal + 1.001 juros = 4.334 total
                     if (installments[1].NominalPrincipalCents != 3333 ||
-                        installments[1].NominalInterestCents != 1000 ||
-                        installments[1].TotalAmountCents != 4333)
+                        installments[1].NominalInterestCents != 1001 ||
+                        installments[1].TotalAmountCents != 4334)
                     {
                         throw new Exception($"TESTE 3 FALHOU na Parcela 2: P={installments[1].NominalPrincipalCents}, J={installments[1].NominalInterestCents}, T={installments[1].TotalAmountCents}");
                     }
@@ -2803,14 +2813,865 @@ namespace CobraPix_PC.Services.Testing
                     Console.WriteLine("TEST_STAGE4_10_INDEPENDENT_PAYMENTS_CLEAN_RECOMPOSITION: PASS");
                 }
 
-                results.Add("TODOS OS TESTES DE CRÉDITO & GIRO (ETAPAS 1, 2, 3 E 4) FORAM APROVADOS COM SUCESSO!");
+                // =============================================================
+                // ETAPA 5: PERIODICIDADE CONFIGURÁVEL, VENCIMENTOS E CENTAVOS
+                // =============================================================
+                results.Add("INICIANDO ETAPA 5: PERIODICIDADE CONFIGURÁVEL, VENCIMENTOS E CENTAVOS");
+
+                // -------------------------------------------------------------
+                // TESTE STAGE5_01: Periodicidade Diária (Saltos de 1 dia civil)
+                // -------------------------------------------------------------
+                using (var ctx = new CobraPixDbContext(options))
+                {
+                    var proSvc = new ProService(ctx);
+                    var contractSvc = new CreditContractService(ctx, proSvc);
+                    var client = await ctx.Clients.FirstAsync();
+
+                    var res = await contractSvc.CreateFixedContractAsync(new CreateContractRequestDto
+                    {
+                        ClientId = client.Id,
+                        ContractNumber = "CTR-S5-DAILY",
+                        PrincipalAmountCents = 30000,
+                        TotalInterestCents = 6000,
+                        InstallmentsCount = 3,
+                        Periodicity = CreditPeriodicity.Daily,
+                        FirstDueDate = new DateTime(2026, 5, 1),
+                        ContractDate = new DateTime(2026, 4, 30),
+                        IdempotencyKey = "KEY-S5-DAILY-1"
+                    });
+
+                    var insts = await ctx.CreditInstallments.Where(i => i.ContractId == res.ContractId).OrderBy(i => i.InstallmentNumber).ToListAsync();
+                    if (insts[0].DueDate != new DateTime(2026, 5, 1) ||
+                        insts[1].DueDate != new DateTime(2026, 5, 2) ||
+                        insts[2].DueDate != new DateTime(2026, 5, 3))
+                        throw new Exception("TEST_STAGE5_01 FALHOU: Vencimentos diários incorretos.");
+
+                    var dbContract = await ctx.CreditContracts.FindAsync(res.ContractId);
+                    if (dbContract!.Periodicity != CreditPeriodicity.Daily || dbContract.CustomIntervalDays != null)
+                        throw new Exception("TEST_STAGE5_01 FALHOU: Metadados de periodicidade diária divergentes no banco.");
+
+                    results.Add("TEST_STAGE5_01_PERIODICITY_DAILY: PASS");
+                    Console.WriteLine("TEST_STAGE5_01_PERIODICITY_DAILY: PASS");
+                }
+
+                // -------------------------------------------------------------
+                // TESTE STAGE5_02: Periodicidade Semanal (Saltos de 7 dias civis)
+                // -------------------------------------------------------------
+                using (var ctx = new CobraPixDbContext(options))
+                {
+                    var proSvc = new ProService(ctx);
+                    var contractSvc = new CreditContractService(ctx, proSvc);
+                    var client = await ctx.Clients.FirstAsync();
+
+                    var res = await contractSvc.CreateFixedContractAsync(new CreateContractRequestDto
+                    {
+                        ClientId = client.Id,
+                        ContractNumber = "CTR-S5-WEEKLY",
+                        PrincipalAmountCents = 40000,
+                        TotalInterestCents = 8000,
+                        InstallmentsCount = 4,
+                        Periodicity = CreditPeriodicity.Weekly,
+                        FirstDueDate = new DateTime(2026, 5, 1),
+                        ContractDate = new DateTime(2026, 4, 30),
+                        IdempotencyKey = "KEY-S5-WEEKLY-1"
+                    });
+
+                    var insts = await ctx.CreditInstallments.Where(i => i.ContractId == res.ContractId).OrderBy(i => i.InstallmentNumber).ToListAsync();
+                    if (insts[0].DueDate != new DateTime(2026, 5, 1) ||
+                        insts[1].DueDate != new DateTime(2026, 5, 8) ||
+                        insts[2].DueDate != new DateTime(2026, 5, 15) ||
+                        insts[3].DueDate != new DateTime(2026, 5, 22))
+                        throw new Exception("TEST_STAGE5_02 FALHOU: Vencimentos semanais incorretos.");
+
+                    results.Add("TEST_STAGE5_02_PERIODICITY_WEEKLY: PASS");
+                    Console.WriteLine("TEST_STAGE5_02_PERIODICITY_WEEKLY: PASS");
+                }
+
+                // -------------------------------------------------------------
+                // TESTE STAGE5_03: Periodicidade Quinzenal (Saltos de 15 dias civis fixos)
+                // -------------------------------------------------------------
+                using (var ctx = new CobraPixDbContext(options))
+                {
+                    var proSvc = new ProService(ctx);
+                    var contractSvc = new CreditContractService(ctx, proSvc);
+                    var client = await ctx.Clients.FirstAsync();
+
+                    var res = await contractSvc.CreateFixedContractAsync(new CreateContractRequestDto
+                    {
+                        ClientId = client.Id,
+                        ContractNumber = "CTR-S5-BIWEEKLY",
+                        PrincipalAmountCents = 30000,
+                        TotalInterestCents = 6000,
+                        InstallmentsCount = 3,
+                        Periodicity = CreditPeriodicity.Biweekly,
+                        FirstDueDate = new DateTime(2026, 5, 1),
+                        ContractDate = new DateTime(2026, 4, 30),
+                        IdempotencyKey = "KEY-S5-BIWEEKLY-1"
+                    });
+
+                    var insts = await ctx.CreditInstallments.Where(i => i.ContractId == res.ContractId).OrderBy(i => i.InstallmentNumber).ToListAsync();
+                    if (insts[0].DueDate != new DateTime(2026, 5, 1) ||
+                        insts[1].DueDate != new DateTime(2026, 5, 16) ||
+                        insts[2].DueDate != new DateTime(2026, 5, 31))
+                        throw new Exception("TEST_STAGE5_03 FALHOU: Vencimentos quinzenais (15 dias fixos) incorretos.");
+
+                    results.Add("TEST_STAGE5_03_PERIODICITY_BIWEEKLY: PASS");
+                    Console.WriteLine("TEST_STAGE5_03_PERIODICITY_BIWEEKLY: PASS");
+                }
+
+                // -------------------------------------------------------------
+                // TESTE STAGE5_04: Periodicidade Personalizada em Dias
+                // -------------------------------------------------------------
+                using (var ctx = new CobraPixDbContext(options))
+                {
+                    var proSvc = new ProService(ctx);
+                    var contractSvc = new CreditContractService(ctx, proSvc);
+                    var client = await ctx.Clients.FirstAsync();
+
+                    var res = await contractSvc.CreateFixedContractAsync(new CreateContractRequestDto
+                    {
+                        ClientId = client.Id,
+                        ContractNumber = "CTR-S5-CUSTOM",
+                        PrincipalAmountCents = 30000,
+                        TotalInterestCents = 6000,
+                        InstallmentsCount = 3,
+                        Periodicity = CreditPeriodicity.CustomDays,
+                        CustomIntervalDays = 10,
+                        FirstDueDate = new DateTime(2026, 5, 1),
+                        ContractDate = new DateTime(2026, 4, 30),
+                        IdempotencyKey = "KEY-S5-CUSTOM-1"
+                    });
+
+                    var insts = await ctx.CreditInstallments.Where(i => i.ContractId == res.ContractId).OrderBy(i => i.InstallmentNumber).ToListAsync();
+                    if (insts[0].DueDate != new DateTime(2026, 5, 1) ||
+                        insts[1].DueDate != new DateTime(2026, 5, 11) ||
+                        insts[2].DueDate != new DateTime(2026, 5, 21))
+                        throw new Exception("TEST_STAGE5_04 FALHOU: Vencimentos personalizados (10 dias) incorretos.");
+
+                    var dbContract = await ctx.CreditContracts.FindAsync(res.ContractId);
+                    if (dbContract!.Periodicity != CreditPeriodicity.CustomDays || dbContract.CustomIntervalDays != 10)
+                        throw new Exception("TEST_STAGE5_04 FALHOU: Metadados de intervalo customizado divergentes no banco.");
+
+                    results.Add("TEST_STAGE5_04_PERIODICITY_CUSTOM_DAYS: PASS");
+                    Console.WriteLine("TEST_STAGE5_04_PERIODICITY_CUSTOM_DAYS: PASS");
+                }
+
+                // -------------------------------------------------------------
+                // TESTE STAGE5_05: Mensal com Fim de Mês e Fevereiro em Ano Bissexto (2024)
+                // -------------------------------------------------------------
+                using (var ctx = new CobraPixDbContext(options))
+                {
+                    var proSvc = new ProService(ctx);
+                    var contractSvc = new CreditContractService(ctx, proSvc);
+                    var client = await ctx.Clients.FirstAsync();
+
+                    var res = await contractSvc.CreateFixedContractAsync(new CreateContractRequestDto
+                    {
+                        ClientId = client.Id,
+                        ContractNumber = "CTR-S5-LEAP",
+                        PrincipalAmountCents = 40000,
+                        TotalInterestCents = 8000,
+                        InstallmentsCount = 4,
+                        Periodicity = CreditPeriodicity.Monthly,
+                        FirstDueDate = new DateTime(2024, 1, 31),
+                        ContractDate = new DateTime(2024, 1, 15),
+                        IdempotencyKey = "KEY-S5-LEAP-1"
+                    });
+
+                    var insts = await ctx.CreditInstallments.Where(i => i.ContractId == res.ContractId).OrderBy(i => i.InstallmentNumber).ToListAsync();
+                    if (insts[0].DueDate != new DateTime(2024, 1, 31) ||
+                        insts[1].DueDate != new DateTime(2024, 2, 29) ||
+                        insts[2].DueDate != new DateTime(2024, 3, 31) ||
+                        insts[3].DueDate != new DateTime(2024, 4, 30))
+                        throw new Exception($"TEST_STAGE5_05 FALHOU: Ancoragem de ano bissexto incorreta ({insts[1].DueDate}, {insts[2].DueDate}).");
+
+                    results.Add("TEST_STAGE5_05_MONTHLY_LEAP_YEAR_FEBRUARY: PASS");
+                    Console.WriteLine("TEST_STAGE5_05_MONTHLY_LEAP_YEAR_FEBRUARY: PASS");
+                }
+
+                // -------------------------------------------------------------
+                // TESTE STAGE5_06: Mensal com Fim de Mês e Fevereiro em Ano Comum (2026)
+                // -------------------------------------------------------------
+                using (var ctx = new CobraPixDbContext(options))
+                {
+                    var proSvc = new ProService(ctx);
+                    var contractSvc = new CreditContractService(ctx, proSvc);
+                    var client = await ctx.Clients.FirstAsync();
+
+                    var res = await contractSvc.CreateFixedContractAsync(new CreateContractRequestDto
+                    {
+                        ClientId = client.Id,
+                        ContractNumber = "CTR-S5-COMMON",
+                        PrincipalAmountCents = 40000,
+                        TotalInterestCents = 8000,
+                        InstallmentsCount = 4,
+                        Periodicity = CreditPeriodicity.Monthly,
+                        FirstDueDate = new DateTime(2026, 1, 31),
+                        ContractDate = new DateTime(2026, 1, 15),
+                        IdempotencyKey = "KEY-S5-COMMON-1"
+                    });
+
+                    var insts = await ctx.CreditInstallments.Where(i => i.ContractId == res.ContractId).OrderBy(i => i.InstallmentNumber).ToListAsync();
+                    if (insts[0].DueDate != new DateTime(2026, 1, 31) ||
+                        insts[1].DueDate != new DateTime(2026, 2, 28) ||
+                        insts[2].DueDate != new DateTime(2026, 3, 31) ||
+                        insts[3].DueDate != new DateTime(2026, 4, 30))
+                        throw new Exception($"TEST_STAGE5_06 FALHOU: Ancoragem de ano comum incorreta ({insts[1].DueDate}, {insts[2].DueDate}).");
+
+                    results.Add("TEST_STAGE5_06_MONTHLY_COMMON_YEAR_FEBRUARY: PASS");
+                    Console.WriteLine("TEST_STAGE5_06_MONTHLY_COMMON_YEAR_FEBRUARY: PASS");
+                }
+
+                // -------------------------------------------------------------
+                // TESTE STAGE5_07: Resíduos Acumulados na Mesma Parcela (remP + remJ >= N)
+                // -------------------------------------------------------------
+                using (var ctx = new CobraPixDbContext(options))
+                {
+                    var proSvc = new ProService(ctx);
+                    var contractSvc = new CreditContractService(ctx, proSvc);
+                    var client = await ctx.Clients.FirstAsync();
+
+                    var res = await contractSvc.CreateFixedContractAsync(new CreateContractRequestDto
+                    {
+                        ClientId = client.Id,
+                        ContractNumber = "CTR-S5-ACCUM",
+                        PrincipalAmountCents = 10001,
+                        TotalInterestCents = 3002,
+                        InstallmentsCount = 3,
+                        Periodicity = CreditPeriodicity.Monthly,
+                        FirstDueDate = new DateTime(2026, 6, 1),
+                        ContractDate = new DateTime(2026, 5, 20),
+                        IdempotencyKey = "KEY-S5-ACCUM-1"
+                    });
+
+                    var insts = await ctx.CreditInstallments.Where(i => i.ContractId == res.ContractId).OrderBy(i => i.InstallmentNumber).ToListAsync();
+
+                    if (insts[0].NominalPrincipalCents != 3334 || insts[0].NominalInterestCents != 1001 || insts[0].TotalAmountCents != 4335)
+                        throw new Exception($"TEST_STAGE5_07 FALHOU P1: P={insts[0].NominalPrincipalCents}, J={insts[0].NominalInterestCents}, T={insts[0].TotalAmountCents}");
+
+                    if (insts[1].NominalPrincipalCents != 3334 || insts[1].NominalInterestCents != 1000 || insts[1].TotalAmountCents != 4334)
+                        throw new Exception($"TEST_STAGE5_07 FALHOU P2: P={insts[1].NominalPrincipalCents}, J={insts[1].NominalInterestCents}, T={insts[1].TotalAmountCents}");
+
+                    if (insts[2].NominalPrincipalCents != 3333 || insts[2].NominalInterestCents != 1001 || insts[2].TotalAmountCents != 4334)
+                        throw new Exception($"TEST_STAGE5_07 FALHOU P3: P={insts[2].NominalPrincipalCents}, J={insts[2].NominalInterestCents}, T={insts[2].TotalAmountCents}");
+
+                    long pSum = insts.Sum(i => i.NominalPrincipalCents);
+                    long jSum = insts.Sum(i => i.NominalInterestCents);
+                    long tSum = insts.Sum(i => i.TotalAmountCents);
+
+                    if (pSum != 10001 || jSum != 3002 || tSum != 13003)
+                        throw new Exception($"TEST_STAGE5_07 FALHOU na soma exata: P={pSum}, J={jSum}, T={tSum}");
+
+                    long diffMaxMin = insts.Max(i => i.TotalAmountCents) - insts.Min(i => i.TotalAmountCents);
+                    if (diffMaxMin > 1)
+                        throw new Exception($"TEST_STAGE5_07 FALHOU: Variação máxima entre parcelas excedeu 1 centavo ({diffMaxMin}).");
+
+                    results.Add("TEST_STAGE5_07_RESIDUE_ACCUMULATION_SAME_INSTALLMENT: PASS");
+                    Console.WriteLine("TEST_STAGE5_07_RESIDUE_ACCUMULATION_SAME_INSTALLMENT: PASS");
+                }
+
+                // -------------------------------------------------------------
+                // TESTE STAGE5_08: Matriz Exaustiva de Centavos (Variações Múltiplas de Resíduo)
+                // -------------------------------------------------------------
+                {
+                    (long P, long J, int N)[] testCases = new (long, long, int)[]
+                    {
+                        (10000, 2000, 1),
+                        (10000, 2000, 3),
+                        (10001, 2000, 3),
+                        (10000, 2001, 3),
+                        (10001, 2001, 3),
+                        (10002, 2002, 3),
+                        (50000, 12345, 7),
+                        (99999, 33333, 11),
+                        (123456, 78910, 17),
+                        (1000000, 250000, 36)
+                    };
+
+                    foreach (var tc in testCases)
+                    {
+                        var parts = CreditContractService.DistributeInstallments(tc.P, tc.J, tc.N);
+                        long sumP = parts.Sum(p => p.principal);
+                        long sumJ = parts.Sum(p => p.interest);
+                        long sumT = parts.Sum(p => p.total);
+                        long maxT = parts.Max(p => p.total);
+                        long minT = parts.Min(p => p.total);
+
+                        if (sumP != tc.P || sumJ != tc.J || sumT != (tc.P + tc.J))
+                            throw new Exception($"TEST_STAGE5_08 FALHOU para P={tc.P}, J={tc.J}, N={tc.N}: Soma incorreta!");
+
+                        if (maxT - minT > 1)
+                            throw new Exception($"TEST_STAGE5_08 FALHOU para P={tc.P}, J={tc.J}, N={tc.N}: Delta ({maxT - minT}) > 1 centavo!");
+                    }
+
+                    results.Add("TEST_STAGE5_08_EXHAUSTIVE_RESIDUE_MATRIX: PASS");
+                    Console.WriteLine("TEST_STAGE5_08_EXHAUSTIVE_RESIDUE_MATRIX: PASS");
+                }
+
+                // -------------------------------------------------------------
+                // TESTE STAGE5_09: Idempotência com Mesma Chave e Rejeição de Divergência
+                // -------------------------------------------------------------
+                using (var ctx = new CobraPixDbContext(options))
+                {
+                    var proSvc = new ProService(ctx);
+                    var contractSvc = new CreditContractService(ctx, proSvc);
+                    var client = await ctx.Clients.FirstAsync();
+
+                    string idemKey = "IDEM-TEST-STAGE5-09";
+                    var reqA = new CreateContractRequestDto
+                    {
+                        ClientId = client.Id,
+                        ContractNumber = "CTR-S5-IDEM-A",
+                        PrincipalAmountCents = 50000,
+                        TotalInterestCents = 10000,
+                        InstallmentsCount = 5,
+                        Periodicity = CreditPeriodicity.Monthly,
+                        FirstDueDate = new DateTime(2026, 7, 1),
+                        ContractDate = new DateTime(2026, 6, 1),
+                        IdempotencyKey = idemKey
+                    };
+
+                    var resA1 = await contractSvc.CreateFixedContractAsync(reqA);
+
+                    var resA2 = await contractSvc.CreateFixedContractAsync(reqA);
+                    if (resA1.ContractId != resA2.ContractId)
+                        throw new Exception("TEST_STAGE5_09 FALHOU: Idempotência idêntica retornou ID diferente.");
+
+                    var reqDiffPeriodicity = new CreateContractRequestDto
+                    {
+                        ClientId = client.Id,
+                        ContractNumber = "CTR-S5-IDEM-A",
+                        PrincipalAmountCents = 50000,
+                        TotalInterestCents = 10000,
+                        InstallmentsCount = 5,
+                        Periodicity = CreditPeriodicity.Weekly,
+                        FirstDueDate = new DateTime(2026, 7, 1),
+                        ContractDate = new DateTime(2026, 6, 1),
+                        IdempotencyKey = idemKey
+                    };
+
+                    bool conflictThrown = false;
+                    try
+                    {
+                        await contractSvc.CreateFixedContractAsync(reqDiffPeriodicity);
+                    }
+                    catch (IdempotencyConflictException)
+                    {
+                        conflictThrown = true;
+                    }
+
+                    if (!conflictThrown)
+                        throw new Exception("TEST_STAGE5_09 FALHOU: Não rejeitou reuso de chave com periodicidade alterada.");
+
+                    var reqDiffCustom = new CreateContractRequestDto
+                    {
+                        ClientId = client.Id,
+                        ContractNumber = "CTR-S5-IDEM-A",
+                        PrincipalAmountCents = 50000,
+                        TotalInterestCents = 10000,
+                        InstallmentsCount = 5,
+                        Periodicity = CreditPeriodicity.CustomDays,
+                        CustomIntervalDays = 20,
+                        FirstDueDate = new DateTime(2026, 7, 1),
+                        ContractDate = new DateTime(2026, 6, 1),
+                        IdempotencyKey = idemKey
+                    };
+
+                    bool conflictCustomThrown = false;
+                    try
+                    {
+                        await contractSvc.CreateFixedContractAsync(reqDiffCustom);
+                    }
+                    catch (IdempotencyConflictException)
+                    {
+                        conflictCustomThrown = true;
+                    }
+
+                    if (!conflictCustomThrown)
+                        throw new Exception("TEST_STAGE5_09 FALHOU: Não rejeitou reuso de chave com intervalo personalizado divergente.");
+
+                    results.Add("TEST_STAGE5_09_IDEMPOTENCY_IDENTICAL_AND_CONFLICT: PASS");
+                    Console.WriteLine("TEST_STAGE5_09_IDEMPOTENCY_IDENTICAL_AND_CONFLICT: PASS");
+                }
+
+                // -------------------------------------------------------------
+                // TESTE STAGE5_10: Validações de Limite (CustomDays e Parcelas)
+                // -------------------------------------------------------------
+                using (var ctx = new CobraPixDbContext(options))
+                {
+                    var proSvc = new ProService(ctx);
+                    var contractSvc = new CreditContractService(ctx, proSvc);
+                    var client = await ctx.Clients.FirstAsync();
+
+                    bool customNullBlocked = false;
+                    try
+                    {
+                        await contractSvc.CreateFixedContractAsync(new CreateContractRequestDto
+                        {
+                            ClientId = client.Id,
+                            ContractNumber = "CTR-FAIL-1",
+                            PrincipalAmountCents = 10000,
+                            TotalInterestCents = 1000,
+                            InstallmentsCount = 2,
+                            Periodicity = CreditPeriodicity.CustomDays,
+                            CustomIntervalDays = null,
+                            FirstDueDate = DateTime.Today.AddDays(10),
+                            IdempotencyKey = "KEY-FAIL-1"
+                        });
+                    }
+                    catch (ArgumentException) { customNullBlocked = true; }
+                    if (!customNullBlocked) throw new Exception("TEST_STAGE5_10 FALHOU: Permitiu CustomDays sem dias definidos.");
+
+                    bool customZeroBlocked = false;
+                    try
+                    {
+                        await contractSvc.CreateFixedContractAsync(new CreateContractRequestDto
+                        {
+                            ClientId = client.Id,
+                            ContractNumber = "CTR-FAIL-2",
+                            PrincipalAmountCents = 10000,
+                            TotalInterestCents = 1000,
+                            InstallmentsCount = 2,
+                            Periodicity = CreditPeriodicity.CustomDays,
+                            CustomIntervalDays = 0,
+                            FirstDueDate = DateTime.Today.AddDays(10),
+                            IdempotencyKey = "KEY-FAIL-2"
+                        });
+                    }
+                    catch (ArgumentException) { customZeroBlocked = true; }
+                    if (!customZeroBlocked) throw new Exception("TEST_STAGE5_10 FALHOU: Permitiu CustomDays com 0 dias.");
+
+                    bool excessInstallmentsBlocked = false;
+                    try
+                    {
+                        await contractSvc.CreateFixedContractAsync(new CreateContractRequestDto
+                        {
+                            ClientId = client.Id,
+                            ContractNumber = "CTR-FAIL-3",
+                            PrincipalAmountCents = 10000,
+                            TotalInterestCents = 1000,
+                            InstallmentsCount = 361,
+                            Periodicity = CreditPeriodicity.Monthly,
+                            FirstDueDate = DateTime.Today.AddDays(10),
+                            IdempotencyKey = "KEY-FAIL-3"
+                        });
+                    }
+                    catch (ArgumentException) { excessInstallmentsBlocked = true; }
+                    if (!excessInstallmentsBlocked) throw new Exception("TEST_STAGE5_10 FALHOU: Permitiu mais de 360 parcelas.");
+
+                    results.Add("TEST_STAGE5_10_VALIDATION_LIMITS: PASS");
+                    Console.WriteLine("TEST_STAGE5_10_VALIDATION_LIMITS: PASS");
+                }
+
+                // -------------------------------------------------------------
+                // TESTE STAGE5_11: Migração Versão 3 Idempotente e Contratos Antigos
+                // -------------------------------------------------------------
+                {
+                    string migTestDb = Path.Combine(baseTempDir, $"cobrapix_mig3_test_{Guid.NewGuid():N}.db");
+                    try
+                    {
+                        var migOpts = new DbContextOptionsBuilder<CobraPixDbContext>()
+                            .UseSqlite($"Data Source={migTestDb}")
+                            .Options;
+
+                        using (var migCtx = new CobraPixDbContext(migOpts))
+                        {
+                            await migCtx.Database.EnsureCreatedAsync();
+
+                            // Carimbo mandatório de ambiente sintético de homologação para validação da trava de segurança
+                            string curToken = Environment.GetEnvironmentVariable("COBRAPIX_SYNTHETIC_TEST_TOKEN") ?? sessionToken;
+                            migCtx.AppSettings.Add(new AppSetting { Key = "DatabaseEnvironment", Value = "SYNTHETIC_TEST" });
+                            migCtx.AppSettings.Add(new AppSetting { Key = "SyntheticSessionToken", Value = curToken });
+                            await migCtx.SaveChangesAsync();
+
+                            // Executa a migração aditiva
+                            await CreditDatabaseMigrator.ApplyCreditMigrationsAsync(migCtx);
+
+                            // Verifica que a versão 3 está gravada
+                            using var conn = (SqliteConnection)migCtx.Database.GetDbConnection();
+                            await conn.OpenAsync();
+                            using var cmd = conn.CreateCommand();
+                            cmd.CommandText = "SELECT MAX(Version) FROM CreditSchemaVersions;";
+                            int ver = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+                            if (ver < 3) throw new Exception($"TEST_STAGE5_11 FALHOU: Versão de schema após migração ({ver}) é menor que 3.");
+
+                            // Testa idempotência reexecutando a migração
+                            await CreditDatabaseMigrator.ApplyCreditMigrationsAsync(migCtx);
+
+                            // Insere cliente e contrato legado (simulando contrato gravado)
+                            var client = new Client { Name = "Cliente Legado", Phone = "11999999999", CreatedAt = DateTime.Now };
+                            migCtx.Clients.Add(client);
+                            await migCtx.SaveChangesAsync();
+
+                            var legacyContract = new CreditContract
+                            {
+                                ClientId = client.Id,
+                                ContractNumber = "CTR-LEGACY-001",
+                                ContractType = CreditContractType.FixedInstallments,
+                                Status = CreditContractStatus.Draft,
+                                DisbursedPrincipalCents = 100000,
+                                TotalNominalInterestCents = 20000,
+                                TotalAmountCents = 120000,
+                                ContractDate = DateTime.Today,
+                                CreatedAtUtc = DateTime.UtcNow
+                            };
+                            migCtx.CreditContracts.Add(legacyContract);
+                            await migCtx.SaveChangesAsync();
+
+                            // Recarrega contrato e valida defaults retrocompatíveis
+                            var reloaded = await migCtx.CreditContracts.FirstAsync(c => c.ContractNumber == "CTR-LEGACY-001");
+                            if (reloaded.Periodicity != CreditPeriodicity.Monthly || reloaded.CustomIntervalDays != null)
+                                throw new Exception("TEST_STAGE5_11 FALHOU: Contrato legado não manteve default Monthly ou CustomIntervalDays não é nulo.");
+                        }
+
+                        results.Add("TEST_STAGE5_11_MIGRATION_VERSION_3_IDEMPOTENCY_AND_LEGACY: PASS");
+                        Console.WriteLine("TEST_STAGE5_11_MIGRATION_VERSION_3_IDEMPOTENCY_AND_LEGACY: PASS");
+                    }
+                    finally
+                    {
+                        SqliteConnection.ClearAllPools();
+                        try { if (File.Exists(migTestDb)) File.Delete(migTestDb); } catch { }
+                    }
+                }
+
+                // =============================================================
+                // ETAPA 6: SUÍTE DE INTEGRAÇÃO UI, USABILIDADE E CICLO DE CONTRATOS (VÍDEO 2026-10-12)
+                // =============================================================
+                results.Add("--------------------------------------------------");
+                results.Add("INICIANDO TESTES DA ETAPA 6: UI, FEEDBACK E USABILIDADE");
+                results.Add("--------------------------------------------------");
+                Console.WriteLine("--------------------------------------------------");
+                Console.WriteLine("INICIANDO TESTES DA ETAPA 6: UI, FEEDBACK E USABILIDADE");
+                Console.WriteLine("--------------------------------------------------");
+
+                // -------------------------------------------------------------
+                // TESTE STAGE6_01: Feedback de Comandos e Exibição de Validação/Exceções na UI
+                // -------------------------------------------------------------
+                using (var ctx = new CobraPixDbContext(options))
+                {
+                    var proSvc = new ProService(ctx);
+                    await proSvc.SetPlanAsync(PlanType.Pro, "Test");
+                    var contractSvc = new CreditContractService(ctx, proSvc);
+                    var paymentSvc = new CreditPaymentService(ctx, proSvc);
+                    var refundSvc = new CreditRefundService(ctx, proSvc);
+                    var clientSvc = new ClientService(ctx, proSvc);
+
+                    var vm = new CreditoGiroViewModel(contractSvc, paymentSvc, refundSvc, proSvc, clientSvc);
+                    await vm.InitializeAsync();
+
+                    // 1. Sem cliente selecionado
+                    vm.SelectedClient = null;
+                    await vm.CreateContractAsync();
+                    if (!vm.HasError || string.IsNullOrWhiteSpace(vm.ErrorMessage) || !vm.ErrorMessage.Contains("Selecione um cliente"))
+                        throw new Exception("TEST_STAGE6_01 FALHOU: Validação de cliente nulo não gerou HasError=true ou mensagem apropriada.");
+                    if (vm.HasSuccess)
+                        throw new Exception("TEST_STAGE6_01 FALHOU: HasSuccess não deve ser verdadeiro em erro.");
+
+                    // Cria cliente para os próximos testes
+                    var clientSintetico = new Client { Name = "Vitor0 - Cliente Teste Sintético", Phone = "11988887777", CreatedAt = DateTime.UtcNow };
+                    ctx.Clients.Add(clientSintetico);
+                    await ctx.SaveChangesAsync();
+                    await vm.LoadClientsAsync();
+                    vm.SelectedClient = vm.Clients.First(c => c.Name == clientSintetico.Name);
+
+                    // 2. Sem número de contrato
+                    vm.NewContractNumber = "";
+                    await vm.CreateContractAsync();
+                    if (!vm.HasError || !vm.ErrorMessage.Contains("número/código"))
+                        throw new Exception("TEST_STAGE6_01 FALHOU: Validação de número de contrato vazio não gerou HasError=true.");
+
+                    // 3. Principal zerado ou negativo
+                    vm.NewContractNumber = "CTR-VAL-01";
+                    vm.NewPrincipalAmount = 0;
+                    await vm.CreateContractAsync();
+                    if (!vm.HasError || !vm.ErrorMessage.Contains("valor principal"))
+                        throw new Exception("TEST_STAGE6_01 FALHOU: Validação de principal <= 0 falhou.");
+
+                    // 4. Parcelas < 1
+                    vm.NewPrincipalAmount = 1000m;
+                    vm.NewInstallmentsCount = 0;
+                    await vm.CreateContractAsync();
+                    if (!vm.HasError || !vm.ErrorMessage.Contains("parcelas"))
+                        throw new Exception("TEST_STAGE6_01 FALHOU: Validação de quantidade de parcelas falhou.");
+
+                    // 5. Periodicidade personalizada sem dias
+                    vm.NewInstallmentsCount = 1;
+                    vm.NewPeriodicity = CreditPeriodicity.CustomDays;
+                    vm.NewCustomIntervalDays = null;
+                    await vm.CreateContractAsync();
+                    if (!vm.HasError || !vm.ErrorMessage.Contains("periodicidade personalizada"))
+                        throw new Exception("TEST_STAGE6_01 FALHOU: Validação de CustomDays nulo falhou.");
+
+                    // 6. Limpeza manual de mensagens
+                    vm.ClearMessages();
+                    if (vm.HasError || vm.HasSuccess || !string.IsNullOrEmpty(vm.ErrorMessage) || !string.IsNullOrEmpty(vm.SuccessMessage))
+                        throw new Exception("TEST_STAGE6_01 FALHOU: ClearMessages não redefiniu flags e mensagens.");
+
+                    results.Add("TEST_STAGE6_01_UI_COMMAND_ERROR_FEEDBACK_AND_VALIDATION: PASS");
+                    Console.WriteLine("TEST_STAGE6_01_UI_COMMAND_ERROR_FEEDBACK_AND_VALIDATION: PASS");
+                }
+
+                // -------------------------------------------------------------
+                // TESTE STAGE6_02: Criação de Contrato com Valores do Vídeo, Limpeza e Auto-Seleção
+                // -------------------------------------------------------------
+                string videoContractId;
+                using (var ctx = new CobraPixDbContext(options))
+                {
+                    var proSvc = new ProService(ctx);
+                    await proSvc.SetPlanAsync(PlanType.Pro, "Test");
+                    var contractSvc = new CreditContractService(ctx, proSvc);
+                    var paymentSvc = new CreditPaymentService(ctx, proSvc);
+                    var refundSvc = new CreditRefundService(ctx, proSvc);
+                    var clientSvc = new ClientService(ctx, proSvc);
+
+                    var vm = new CreditoGiroViewModel(contractSvc, paymentSvc, refundSvc, proSvc, clientSvc);
+                    await vm.InitializeAsync();
+                    await vm.LoadClientsAsync();
+
+                    var client = vm.Clients.First(c => c.Name.Contains("Vitor0"));
+                    vm.SelectedClient = client;
+
+                    // Parâmetros exatos do vídeo Gravando 2026-10-12 213321.mp4:
+                    vm.NewContractNumber = "1";
+                    vm.NewPrincipalAmount = 1000m;
+                    vm.NewTotalInterest = 200m;
+                    vm.NewInstallmentsCount = 1;
+                    vm.NewFirstDueDate = new DateTime(2026, 11, 11);
+                    vm.NewPeriodicity = CreditPeriodicity.Monthly;
+                    vm.NewContractDate = new DateTime(2026, 10, 12);
+                    vm.NewNotes = "teste";
+
+                    await vm.CreateContractAsync();
+
+                    if (vm.HasError)
+                        throw new Exception($"TEST_STAGE6_02 FALHOU com erro inesperado: {vm.ErrorMessage}");
+                    if (!vm.HasSuccess || string.IsNullOrWhiteSpace(vm.SuccessMessage) || !vm.SuccessMessage.Contains("criado com sucesso"))
+                        throw new Exception("TEST_STAGE6_02 FALHOU: HasSuccess não é true ou mensagem de sucesso ausente.");
+
+                    // Limpeza do formulário
+                    if (!string.IsNullOrEmpty(vm.NewContractNumber) || !string.IsNullOrEmpty(vm.NewNotes))
+                        throw new Exception("TEST_STAGE6_02 FALHOU: Formulário de novo contrato não foi limpo após salvar.");
+
+                    // Auto-seleção na grade
+                    if (vm.SelectedContract == null || vm.SelectedContract.ContractNumber != "1")
+                        throw new Exception("TEST_STAGE6_02 FALHOU: Contrato recém-criado não foi selecionado automaticamente.");
+
+                    if (vm.SelectedPaymentContract == null || vm.SelectedPaymentContract.ContractNumber != "1")
+                        throw new Exception("TEST_STAGE6_02 FALHOU: Contrato não sincronizou com SelectedPaymentContract.");
+
+                    if (!vm.CanDisburseSelectedContract)
+                        throw new Exception("TEST_STAGE6_02 FALHOU: CanDisburseSelectedContract deveria ser verdadeiro para Draft.");
+
+                    videoContractId = vm.SelectedContract.Id;
+
+                    // Formatação monetária nos modelos
+                    if (vm.SelectedContract.FormattedDisbursedPrincipal != "R$ 1.000,00" ||
+                        vm.SelectedContract.FormattedTotalNominalInterest != "R$ 200,00" ||
+                        vm.SelectedContract.FormattedTotalAmount != "R$ 1.200,00")
+                    {
+                        throw new Exception($"TEST_STAGE6_02 FALHOU: Formatação de moeda incorreta ({vm.SelectedContract.FormattedTotalAmount}).");
+                    }
+
+                    if (!vm.SelectedContract.DisplaySummary.Contains("#1") || !vm.SelectedContract.DisplaySummary.Contains("R$ 1.200,00"))
+                        throw new Exception($"TEST_STAGE6_02 FALHOU: DisplaySummary incorreto ({vm.SelectedContract.DisplaySummary}).");
+
+                    results.Add("TEST_STAGE6_02_CONTRACT_CREATION_FORM_CLEANUP_AND_SELECTION: PASS");
+                    Console.WriteLine("TEST_STAGE6_02_CONTRACT_CREATION_FORM_CLEANUP_AND_SELECTION: PASS");
+                }
+
+                // -------------------------------------------------------------
+                // TESTE STAGE6_03: Ciclo Completo: Rascunho -> Desembolso -> Prévia -> Pagamento Quitado
+                // -------------------------------------------------------------
+                using (var ctx = new CobraPixDbContext(options))
+                {
+                    var proSvc = new ProService(ctx);
+                    await proSvc.SetPlanAsync(PlanType.Pro, "Test");
+                    var contractSvc = new CreditContractService(ctx, proSvc);
+                    var paymentSvc = new CreditPaymentService(ctx, proSvc);
+                    var refundSvc = new CreditRefundService(ctx, proSvc);
+                    var clientSvc = new ClientService(ctx, proSvc);
+
+                    var vm = new CreditoGiroViewModel(contractSvc, paymentSvc, refundSvc, proSvc, clientSvc);
+                    await vm.InitializeAsync();
+                    await vm.LoadContractsAsync();
+
+                    var contract = vm.Contracts.First(c => c.Id == videoContractId);
+                    vm.SelectedContract = contract;
+
+                    // 1. Desembolso
+                    await vm.DisburseContractAsync();
+                    if (vm.HasError) throw new Exception($"TEST_STAGE6_03 FALHOU no desembolso: {vm.ErrorMessage}");
+                    if (vm.SelectedContract.Status != CreditContractStatus.Active)
+                        throw new Exception($"TEST_STAGE6_03 FALHOU: Status após desembolso esperado Active, obtido {vm.SelectedContract.Status}.");
+                    if (vm.CanDisburseSelectedContract)
+                        throw new Exception("TEST_STAGE6_03 FALHOU: CanDisburseSelectedContract deveria ser falso após desembolso.");
+
+                    // 2. Simulação / Prévia de Pagamento (Regra A)
+                    vm.SelectedPaymentContract = vm.SelectedContract;
+                    vm.PaymentContractId = vm.SelectedContract.Id;
+                    vm.PaymentAmount = 1200m;
+                    await vm.PreviewPaymentAsync();
+
+                    if (vm.PaymentPreview == null)
+                        throw new Exception("TEST_STAGE6_03 FALHOU: PaymentPreview é nulo após simulação.");
+                    if (vm.PaymentPreview.TotalInterestAllocatedCents != 20000 ||
+                        vm.PaymentPreview.TotalPrincipalAllocatedCents != 100000 ||
+                        vm.PaymentPreview.SurplusGeneratedCents != 0)
+                    {
+                        throw new Exception($"TEST_STAGE6_03 FALHOU na prévia: J={vm.PaymentPreview.TotalInterestAllocatedCents}, P={vm.PaymentPreview.TotalPrincipalAllocatedCents}, S={vm.PaymentPreview.SurplusGeneratedCents}");
+                    }
+
+                    // 3. Gravação do Pagamento
+                    await vm.RegisterPaymentAsync();
+                    if (vm.HasError) throw new Exception($"TEST_STAGE6_03 FALHOU na gravação do pagamento: {vm.ErrorMessage}");
+                    if (!vm.HasSuccess || vm.SuccessMessage == null || !vm.SuccessMessage.Contains("sucesso"))
+                        throw new Exception("TEST_STAGE6_03 FALHOU: Mensagem de sucesso ausente após gravação do pagamento.");
+
+                    // 4. Confirmação no banco e atualização da lista
+                    await vm.LoadContractsAsync();
+                    var updatedContract = vm.Contracts.First(c => c.Id == videoContractId);
+                    if (updatedContract.Status != CreditContractStatus.Completed)
+                        throw new Exception($"TEST_STAGE6_03 FALHOU: Status do contrato esperado Completed, obtido {updatedContract.Status}.");
+
+                    await vm.LoadPaymentsAsync();
+                    var pay = vm.Payments.First(p => p.ContractId == videoContractId);
+                    if (pay.FormattedAmount != "R$ 1.200,00")
+                        throw new Exception($"TEST_STAGE6_03 FALHOU: FormattedAmount do pagamento incorreto ({pay.FormattedAmount}).");
+
+                    results.Add("TEST_STAGE6_03_FULL_LIFECYCLE_DRAFT_DISBURSE_PAYMENT: PASS");
+                    Console.WriteLine("TEST_STAGE6_03_FULL_LIFECYCLE_DRAFT_DISBURSE_PAYMENT: PASS");
+                }
+
+                // -------------------------------------------------------------
+                // TESTE STAGE6_04: Usabilidade e Resolução Flexível do Contrato em Pagamentos
+                // -------------------------------------------------------------
+                using (var ctx = new CobraPixDbContext(options))
+                {
+                    var proSvc = new ProService(ctx);
+                    await proSvc.SetPlanAsync(PlanType.Pro, "Test");
+                    var contractSvc = new CreditContractService(ctx, proSvc);
+                    var paymentSvc = new CreditPaymentService(ctx, proSvc);
+                    var refundSvc = new CreditRefundService(ctx, proSvc);
+                    var clientSvc = new ClientService(ctx, proSvc);
+
+                    var vm = new CreditoGiroViewModel(contractSvc, paymentSvc, refundSvc, proSvc, clientSvc);
+                    await vm.InitializeAsync();
+                    await vm.LoadContractsAsync();
+
+                    // Cria um novo contrato com código legível específico
+                    var clientResolve = new Client { Name = "Cliente Resolucao Teste Sintetico", Phone = "11977776666", CreatedAt = DateTime.UtcNow };
+                    ctx.Clients.Add(clientResolve);
+                    await ctx.SaveChangesAsync();
+                    await vm.LoadClientsAsync();
+
+                    vm.SelectedClient = vm.Clients.First(c => c.Name == clientResolve.Name);
+                    vm.NewContractNumber = "CTR-RES-01";
+                    vm.NewPrincipalAmount = 500m;
+                    vm.NewTotalInterest = 50m;
+                    vm.NewInstallmentsCount = 1;
+                    vm.NewFirstDueDate = DateTime.Today.AddDays(10);
+                    vm.NewPeriodicity = CreditPeriodicity.Monthly;
+                    await vm.CreateContractAsync();
+
+                    if (vm.HasError) throw new Exception($"TEST_STAGE6_04 falhou ao criar contrato: {vm.ErrorMessage}");
+                    var created = vm.Contracts.First(c => c.ContractNumber == "CTR-RES-01");
+                    vm.SelectedContract = created;
+                    await vm.DisburseContractAsync();
+
+                    // Teste A: Resolução por GUID exato
+                    var resA = vm.ResolveContract(created.Id);
+                    if (resA?.Id != created.Id) throw new Exception("TEST_STAGE6_04 FALHOU: Resolução por GUID falhou.");
+
+                    // Teste B: Resolução por Número do Contrato (ex: 'CTR-RES-01')
+                    var resB = vm.ResolveContract("CTR-RES-01");
+                    if (resB?.Id != created.Id) throw new Exception("TEST_STAGE6_04 FALHOU: Resolução por número de contrato falhou.");
+
+                    // Teste C: Resolução por Nome do Cliente
+                    var resC = vm.ResolveContract("Cliente Resolucao Teste Sintetico");
+                    if (resC?.Id != created.Id) throw new Exception("TEST_STAGE6_04 FALHOU: Resolução por nome do cliente falhou.");
+
+                    // Teste D: Pagamento digitando apenas o número legível no campo PaymentContractId
+                    vm.PaymentContractId = "CTR-RES-01";
+                    vm.PaymentAmount = 550m;
+                    await vm.PreviewPaymentAsync();
+                    if (vm.HasError) throw new Exception($"TEST_STAGE6_04 FALHOU na prévia com número legível: {vm.ErrorMessage}");
+                    if (vm.SelectedPaymentContract?.Id != created.Id)
+                        throw new Exception("TEST_STAGE6_04 FALHOU: SelectedPaymentContract não sincronizou na prévia.");
+
+                    await vm.RegisterPaymentAsync();
+                    if (vm.HasError) throw new Exception($"TEST_STAGE6_04 FALHOU no registro com número legível: {vm.ErrorMessage}");
+
+                    results.Add("TEST_STAGE6_04_PAYMENT_CONTRACT_USABILITY_RESOLUTION: PASS");
+                    Console.WriteLine("TEST_STAGE6_04_PAYMENT_CONTRACT_USABILITY_RESOLUTION: PASS");
+                }
+
+                // -------------------------------------------------------------
+                // TESTE STAGE6_05: Validação das Novas Periodicidades e Valores da Interface
+                // -------------------------------------------------------------
+                using (var ctx = new CobraPixDbContext(options))
+                {
+                    var proSvc = new ProService(ctx);
+                    await proSvc.SetPlanAsync(PlanType.Pro, "Test");
+                    var contractSvc = new CreditContractService(ctx, proSvc);
+                    var paymentSvc = new CreditPaymentService(ctx, proSvc);
+                    var refundSvc = new CreditRefundService(ctx, proSvc);
+                    var clientSvc = new ClientService(ctx, proSvc);
+
+                    var vm = new CreditoGiroViewModel(contractSvc, paymentSvc, refundSvc, proSvc, clientSvc);
+                    await vm.InitializeAsync();
+                    await vm.LoadClientsAsync();
+
+                    var client = vm.Clients.First();
+                    vm.SelectedClient = client;
+
+                    // Matriz de testes de periodicidade exibidas no vídeo:
+                    var periodicitiesToTest = new (CreditPeriodicity periodicity, int? customDays, int installments, string code)[]
+                    {
+                        (CreditPeriodicity.Daily, null, 1, "CTR-PER-DAILY"),
+                        (CreditPeriodicity.Weekly, null, 4, "CTR-PER-WEEKLY"),
+                        (CreditPeriodicity.Biweekly, null, 2, "CTR-PER-BIWEEKLY"),
+                        (CreditPeriodicity.Monthly, null, 1, "CTR-PER-MONTHLY"),
+                        (CreditPeriodicity.CustomDays, 15, 3, "CTR-PER-CUSTOM15")
+                    };
+
+                    foreach (var tc in periodicitiesToTest)
+                    {
+                        vm.NewContractNumber = tc.code;
+                        vm.NewPrincipalAmount = 1000m;
+                        vm.NewTotalInterest = 200m;
+                        vm.NewInstallmentsCount = tc.installments;
+                        vm.NewPeriodicity = tc.periodicity;
+                        vm.NewCustomIntervalDays = tc.customDays;
+                        vm.NewFirstDueDate = DateTime.Today.AddDays(10);
+                        vm.NewContractDate = DateTime.Today;
+
+                        await vm.CreateContractAsync();
+                        if (vm.HasError)
+                            throw new Exception($"TEST_STAGE6_05 FALHOU ao criar contrato com periodicidade {tc.periodicity}: {vm.ErrorMessage}");
+
+                        var saved = vm.Contracts.FirstOrDefault(c => c.ContractNumber == tc.code);
+                        if (saved == null)
+                            throw new Exception($"TEST_STAGE6_05 FALHOU: Contrato {tc.code} não listado na grade.");
+                        if (saved.Periodicity != tc.periodicity)
+                            throw new Exception($"TEST_STAGE6_05 FALHOU: Periodicidade divergente no contrato {tc.code} ({saved.Periodicity} != {tc.periodicity}).");
+                        if (saved.CustomIntervalDays != tc.customDays)
+                            throw new Exception($"TEST_STAGE6_05 FALHOU: CustomIntervalDays divergente no contrato {tc.code}.");
+                    }
+
+                    results.Add("TEST_STAGE6_05_ALL_PERIODICITIES_WITH_INTERFACE_VALUES: PASS");
+                    Console.WriteLine("TEST_STAGE6_05_ALL_PERIODICITIES_WITH_INTERFACE_VALUES: PASS");
+                }
+
+                results.Add("TODOS OS TESTES DE CRÉDITO & GIRO (ETAPAS 1, 2, 3, 4, 5 E 6) FORAM APROVADOS COM SUCESSO!");
                 Console.WriteLine("==================================================");
-                Console.WriteLine("TODOS OS TESTES DE CRÉDITO & GIRO (ETAPAS 1, 2, 3 E 4) FORAM APROVADOS COM SUCESSO!");
+                Console.WriteLine("TODOS OS TESTES DE CRÉDITO & GIRO (ETAPAS 1, 2, 3, 4, 5 E 6) FORAM APROVADOS COM SUCESSO!");
                 Console.WriteLine("==================================================");
                 return results;
             }
             finally
             {
+                Environment.SetEnvironmentVariable(DatabasePath.DatabasePathEnvVar, previousDbPathEnv);
+
                 // Limpeza segura dos pools SQLite e exclusão do banco temporário isolado
                 SqliteConnection.ClearAllPools();
                 try
@@ -2819,6 +3680,719 @@ namespace CobraPix_PC.Services.Testing
                         File.Delete(tempDbPath);
                 }
                 catch { }
+            }
+        }
+
+        /// <summary>
+        /// Suíte automatizada de testes negativos de segurança e isolamento físico do Grupo 2A.
+        /// Valida todas as travas contra fallback, junctions, fugas de sandbox, escrita em produção,
+        /// DbConnection arbitrária, isolamento de recibos/sons/Registro e propagação de exceções de segurança.
+        /// </summary>
+        public static async Task<List<string>> RunIsolationSecurityTestsAsync(string? explicitSandboxRoot = null)
+        {
+            var results = new List<string>();
+
+            // Salva estado das variáveis de ambiente para restauração estrita no finally
+            string? prevMode = Environment.GetEnvironmentVariable(DatabasePath.ExecutionModeEnvVar);
+            string? prevAllow = Environment.GetEnvironmentVariable(DatabasePath.AllowTestDbEnvVar);
+            string? prevSandbox = Environment.GetEnvironmentVariable(DatabasePath.SandboxRootEnvVar);
+            string? prevDb = Environment.GetEnvironmentVariable(DatabasePath.DatabasePathEnvVar);
+            string? prevBackupDir = Environment.GetEnvironmentVariable(BackupService.BackupDirectoryEnvVar);
+            string? prevReceiptsDir = Environment.GetEnvironmentVariable(ReceiptPdfService.ReceiptsDirectoryEnvVar);
+            string? prevSoundsDir = Environment.GetEnvironmentVariable(ConfiguracoesViewModel.SoundsDirectoryEnvVar);
+
+            string scratchRoot = !string.IsNullOrWhiteSpace(explicitSandboxRoot)
+                ? Path.Combine(Path.GetFullPath(explicitSandboxRoot), "sec_sandbox_" + Guid.NewGuid().ToString("N"))
+                : Path.GetFullPath(Path.Combine(Path.GetTempPath(), "cobrapix_sec_sandbox_" + Guid.NewGuid().ToString("N")));
+
+            string confinedDir = Path.Combine(scratchRoot, "confined");
+            string outsideDir = Path.Combine(scratchRoot, "outside");
+            string junctionEscape = Path.Combine(confinedDir, "junction_to_outside");
+
+            Directory.CreateDirectory(confinedDir);
+            Directory.CreateDirectory(outsideDir);
+
+            // Cria junction NTFS dentro de confinedDir apontando para outsideDir
+            if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
+            {
+                var psi = new System.Diagnostics.ProcessStartInfo("cmd.exe", $"/c mklink /J \"{junctionEscape}\" \"{outsideDir}\"")
+                {
+                    CreateNoWindow = true,
+                    UseShellExecute = false
+                };
+                System.Diagnostics.Process.Start(psi)?.WaitForExit();
+            }
+
+            // Snapshot do valor real do Registro do Windows antes de qualquer teste
+            string? initialRegistryValue = null;
+            try
+            {
+                using var key = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", writable: false);
+                initialRegistryValue = key?.GetValue("CobraPixPC") as string;
+            }
+            catch { }
+
+            try
+            {
+                string prodDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CobraPix");
+                string prodDb = Path.Combine(prodDir, "cobrapix.db");
+
+                // Configuração inicial de ambiente de teste confinado
+                Environment.SetEnvironmentVariable(DatabasePath.ExecutionModeEnvVar, "TEST");
+                Environment.SetEnvironmentVariable(DatabasePath.AllowTestDbEnvVar, "1");
+                Environment.SetEnvironmentVariable(DatabasePath.SandboxRootEnvVar, confinedDir);
+
+                results.Add("INICIANDO SUÍTE DE TESTES NEGATIVOS DE ISOLAMENTO E SEGURANÇA (GRUPO 2A)");
+                results.Add($"Sandbox Confinada: {confinedDir}");
+
+                // =========================================================================
+                // CATEGORIA 4: Configuração de teste incompleta ou ausente (Fail-Closed)
+                // =========================================================================
+                Environment.SetEnvironmentVariable(DatabasePath.DatabasePathEnvVar, null);
+                Environment.SetEnvironmentVariable(BackupService.BackupDirectoryEnvVar, null);
+                Environment.SetEnvironmentVariable(ReceiptPdfService.ReceiptsDirectoryEnvVar, null);
+                Environment.SetEnvironmentVariable(ConfiguracoesViewModel.SoundsDirectoryEnvVar, null);
+
+                AssertThrows<InvalidOperationException>(results, "4a. DatabasePath.GetDatabaseFilePath fail-closed sem COBRAPIX_DATABASE_PATH", () =>
+                {
+                    _ = DatabasePath.GetDatabaseFilePath();
+                });
+
+                AssertThrows<InvalidOperationException>(results, "4b. DatabaseInitializer.Initialize fail-closed sem COBRAPIX_DATABASE_PATH", () =>
+                {
+                    DatabaseInitializer.Initialize();
+                });
+
+                var unconfiguredBackupSvc = new BackupService();
+                AssertThrows<InvalidOperationException>(results, "4c. BackupService.GetAutoBackupDirectory fail-closed sem variaveis", () =>
+                {
+                    _ = unconfiguredBackupSvc.GetAutoBackupDirectory();
+                });
+
+                AssertThrows<InvalidOperationException>(results, "4d. BackupService.GetCurrentDatabasePath fail-closed sem variaveis", () =>
+                {
+                    _ = unconfiguredBackupSvc.GetCurrentDatabasePath();
+                });
+
+                var unconfiguredPdfSvc = new ReceiptPdfService();
+                AssertThrows<InvalidOperationException>(results, "4e. ReceiptPdfService.GetReceiptsDirectory fail-closed sem COBRAPIX_RECEIPTS_DIRECTORY", () =>
+                {
+                    _ = unconfiguredPdfSvc.GetReceiptsDirectory();
+                });
+
+                AssertThrows<InvalidOperationException>(results, "4f. ConfiguracoesViewModel.GetSoundsDirectory fail-closed sem COBRAPIX_SOUNDS_DIRECTORY", () =>
+                {
+                    _ = ConfiguracoesViewModel.GetSoundsDirectory();
+                });
+
+                CreditProductionSafetyGuard.SetTestProductionPathOverride(null);
+                AssertThrows<InvalidOperationException>(results, "4g. CreditProductionSafetyGuard.GetSentinelFilePath fail-closed sem override", () =>
+                {
+                    _ = CreditProductionSafetyGuard.GetSentinelFilePath();
+                });
+
+                // =========================================================================
+                // CATEGORIA 5: Fallback de App.Services / CobraPixDbContext e Conexões
+                // =========================================================================
+                AssertThrows<InvalidOperationException>(results, "5a. new CobraPixDbContext() bloqueia fallback implicito sem COBRAPIX_DATABASE_PATH", () =>
+                {
+                    using var ctx = new CobraPixDbContext();
+                });
+
+                AssertThrows<InvalidOperationException>(results, "5b. new CobraPixDbContext(options) bloqueia conexao apontando para banco de producao", () =>
+                {
+                    var prodOpts = new DbContextOptionsBuilder<CobraPixDbContext>()
+                        .UseSqlite($"Data Source={prodDb}")
+                        .Options;
+                    using var ctx = new CobraPixDbContext(prodOpts);
+                });
+
+                string outsideDb = Path.Combine(outsideDir, "outside_ctx.db");
+                AssertThrows<InvalidOperationException>(results, "5c. new CobraPixDbContext(options) bloqueia conexao fora da sandbox", () =>
+                {
+                    var outOpts = new DbContextOptionsBuilder<CobraPixDbContext>()
+                        .UseSqlite($"Data Source={outsideDb}")
+                        .Options;
+                    using var ctx = new CobraPixDbContext(outOpts);
+                });
+
+                AssertThrows<InvalidOperationException>(results, "5d. DI ServiceProvider bloqueia resolucao implicita de CobraPixDbContext sem base descartavel", () =>
+                {
+                    var services = new ServiceCollection();
+                    services.AddDbContext<CobraPixDbContext>();
+                    using var sp = services.BuildServiceProvider();
+                    using var scope = sp.CreateScope();
+                    _ = scope.ServiceProvider.GetRequiredService<CobraPixDbContext>();
+                });
+
+                // Validação de DbConnection pré-instanciada (Tarefa 2)
+                using (var memConn = new SqliteConnection("Data Source=:memory:"))
+                {
+                    var memOpts = new DbContextOptionsBuilder<CobraPixDbContext>()
+                        .UseSqlite(memConn)
+                        .Options;
+                    using (var memCtx = new CobraPixDbContext(memOpts))
+                    {
+                        results.Add("[PASS] 5e. DbConnection em memória permitida com sucesso");
+                    }
+                }
+
+                // Configura banco de dados descartável válido dentro da sandbox para os testes seguintes
+                string validTestDb = Path.Combine(confinedDir, "test_disposable.db");
+                string validBackupDir = Path.Combine(confinedDir, "backups");
+                string validReceiptsDir = Path.Combine(confinedDir, "receipts");
+                string validSoundsDir = Path.Combine(confinedDir, "sounds");
+
+                Environment.SetEnvironmentVariable(DatabasePath.DatabasePathEnvVar, validTestDb);
+                Environment.SetEnvironmentVariable(BackupService.BackupDirectoryEnvVar, validBackupDir);
+                Environment.SetEnvironmentVariable(ReceiptPdfService.ReceiptsDirectoryEnvVar, validReceiptsDir);
+                Environment.SetEnvironmentVariable(ConfiguracoesViewModel.SoundsDirectoryEnvVar, validSoundsDir);
+
+                var validOpts = new DbContextOptionsBuilder<CobraPixDbContext>()
+                    .UseSqlite($"Data Source={validTestDb}")
+                    .Options;
+
+                using (var initCtx = new CobraPixDbContext(validOpts))
+                {
+                    await initCtx.Database.EnsureCreatedAsync();
+                    initCtx.Clients.Add(new Client { Name = "Cliente Isolado G2A", Phone = "11999998888", CreatedAt = DateTime.Now });
+                    await initCtx.SaveChangesAsync();
+                }
+
+                using (var inSandboxConn = new SqliteConnection($"Data Source={validTestDb}"))
+                {
+                    var inSandboxOpts = new DbContextOptionsBuilder<CobraPixDbContext>()
+                        .UseSqlite(inSandboxConn)
+                        .Options;
+                    using (var inSandboxCtx = new CobraPixDbContext(inSandboxOpts))
+                    {
+                        results.Add("[PASS] 5f. DbConnection dentro da sandbox permitida com sucesso");
+                    }
+                }
+
+                using (var prodConn = new SqliteConnection($"Data Source={prodDb}"))
+                {
+                    var prodConnOpts = new DbContextOptionsBuilder<CobraPixDbContext>()
+                        .UseSqlite(prodConn)
+                        .Options;
+                    AssertThrows<InvalidOperationException>(results, "5g. new CobraPixDbContext(options) bloqueia DbConnection apontando para o banco de producao", () =>
+                    {
+                        using var prodCtx = new CobraPixDbContext(prodConnOpts);
+                    });
+                }
+
+                string outsideDbConn = Path.Combine(outsideDir, "outside_dbconn.db");
+                using (var outConn = new SqliteConnection($"Data Source={outsideDbConn}"))
+                {
+                    var outConnOpts = new DbContextOptionsBuilder<CobraPixDbContext>()
+                        .UseSqlite(outConn)
+                        .Options;
+                    AssertThrows<InvalidOperationException>(results, "5h. new CobraPixDbContext(options) bloqueia DbConnection fora da sandbox", () =>
+                    {
+                        using var outCtx = new CobraPixDbContext(outConnOpts);
+                    });
+                }
+
+                // Testes adversariais: tentativa de contornar bloqueio de produção com Mode=Memory
+                using (var prodMemConn = new SqliteConnection($"Data Source={prodDb};Mode=Memory;"))
+                {
+                    var prodMemOpts = new DbContextOptionsBuilder<CobraPixDbContext>()
+                        .UseSqlite(prodMemConn)
+                        .Options;
+                    AssertThrows<InvalidOperationException>(results, "5i. new CobraPixDbContext(options) bloqueia DbConnection de producao mesmo com Mode=Memory", () =>
+                    {
+                        using var prodMemCtx = new CobraPixDbContext(prodMemOpts);
+                    });
+                }
+
+                var prodMemConnStrOpts = new DbContextOptionsBuilder<CobraPixDbContext>()
+                    .UseSqlite($"Data Source={prodDb};Mode=Memory;")
+                    .Options;
+                AssertThrows<InvalidOperationException>(results, "5j. new CobraPixDbContext(options) bloqueia ConnectionString de producao mesmo com Mode=Memory", () =>
+                {
+                    using var prodMemCtx = new CobraPixDbContext(prodMemConnStrOpts);
+                });
+
+                // Testes de banco em memória com URI legítima
+                var uriOpts = new DbContextOptionsBuilder<CobraPixDbContext>()
+                    .UseSqlite("Data Source=file:memdb_opts?mode=memory&cache=shared")
+                    .Options;
+                using (var uriCtx = new CobraPixDbContext(uriOpts))
+                {
+                    results.Add("[PASS] 5k. DbContextOptions com URI em memória permitida com sucesso");
+                }
+
+                using (var uriConn = new SqliteConnection("Data Source=file:memdb_conn?mode=memory&cache=shared"))
+                {
+                    var uriConnOpts = new DbContextOptionsBuilder<CobraPixDbContext>()
+                        .UseSqlite(uriConn)
+                        .Options;
+                    using (var uriConnCtx = new CobraPixDbContext(uriConnOpts))
+                    {
+                        results.Add("[PASS] 5l. DbConnection com URI em memória permitida com sucesso");
+                    }
+                }
+
+                // Prepara backups de teste (.cpb e .json) dentro da sandbox
+                string validCpbPath = Path.Combine(validBackupDir, "valid_backup.cpb");
+                string validJsonPath = Path.Combine(validBackupDir, "valid_android.json");
+                Directory.CreateDirectory(validBackupDir);
+
+                using (var setupCtx = new CobraPixDbContext(validOpts))
+                {
+                    var bSvc = new BackupService(setupCtx);
+                    var cpbRes = await bSvc.CreateBackupAsync(validCpbPath, validTestDb);
+                    if (!cpbRes.Success || !File.Exists(validCpbPath))
+                        throw new Exception("Falha ao preparar valid_backup.cpb na sandbox.");
+                }
+                File.WriteAllText(validJsonPath, "{\"clients\":[],\"sales\":[],\"installments\":[],\"payments\":[]}");
+
+                // =========================================================================
+                // CATEGORIA 1: Caminho de restauração apontando diretamente para produção
+                // =========================================================================
+                using (var ctx = new CobraPixDbContext(validOpts))
+                {
+                    var backupSvc = new BackupService(ctx);
+                    var androidSvc = new AndroidImportService(ctx);
+
+                    await AssertThrowsAsync<InvalidOperationException>(results, "1a. RestoreBackupAsync(.cpb) bloqueia banco de producao antes de qualquer escrita", async () =>
+                    {
+                        await backupSvc.RestoreBackupAsync(validCpbPath, prodDb);
+                    });
+
+                    await AssertThrowsAsync<InvalidOperationException>(results, "1b. RestoreBackupAsync(.json) bloqueia banco de producao antes de delegar ao AndroidImportService", async () =>
+                    {
+                        await backupSvc.RestoreBackupAsync(validJsonPath, prodDb);
+                    });
+
+                    await AssertThrowsAsync<InvalidOperationException>(results, "1c. AndroidImportService.ImportAsync bloqueia banco de producao diretamente", async () =>
+                    {
+                        await androidSvc.ImportAsync(validJsonPath, prodDb);
+                    });
+
+                    await AssertThrowsAsync<InvalidOperationException>(results, "1d. CreateBackupAsync bloqueia gravacao de backup dentro do diretorio de producao", async () =>
+                    {
+                        await backupSvc.CreateBackupAsync(Path.Combine(prodDir, "evil_backup.cpb"), validTestDb);
+                    });
+
+                    await AssertThrowsAsync<InvalidOperationException>(results, "1e. CreateBackupAsync bloqueia leitura do banco de producao como origem em modo de teste", async () =>
+                    {
+                        await backupSvc.CreateBackupAsync(Path.Combine(validBackupDir, "from_prod.cpb"), prodDb);
+                    });
+                }
+
+                // =========================================================================
+                // CATEGORIA 2: Caminho equivalente por junction ou symlink
+                // =========================================================================
+                using (var ctx = new CobraPixDbContext(validOpts))
+                {
+                    var backupSvc = new BackupService(ctx);
+                    var androidSvc = new AndroidImportService(ctx);
+                    string junctionTargetDb = Path.Combine(junctionEscape, "junction_target.db");
+
+                    await AssertThrowsAsync<InvalidOperationException>(results, "2a. RestoreBackupAsync(.cpb) bloqueia destino via NTFS junction que aponta para fora da sandbox", async () =>
+                    {
+                        await backupSvc.RestoreBackupAsync(validCpbPath, junctionTargetDb);
+                    });
+
+                    await AssertThrowsAsync<InvalidOperationException>(results, "2b. AndroidImportService.ImportAsync bloqueia destino via NTFS junction", async () =>
+                    {
+                        await androidSvc.ImportAsync(validJsonPath, junctionTargetDb);
+                    });
+
+                    AssertThrows<InvalidOperationException>(results, "2c. BackupService.AssertSafeBackupDirectory bloqueia diretorio via NTFS junction", () =>
+                    {
+                        BackupService.AssertSafeBackupDirectory(junctionEscape);
+                    });
+
+                    if (Directory.EnumerateFileSystemEntries(outsideDir).Any())
+                    {
+                        throw new Exception("FALHA DE ISOLAMENTO: Arquivos ou diretorios foram criados em outsideDir atraves da junction!");
+                    }
+                    results.Add("[PASS] 2d. Comprovado zero efeitos colaterais em outsideDir apos bloqueio de junction");
+                }
+
+                // =========================================================================
+                // CATEGORIA 3: Caminho que escape da sandbox
+                // =========================================================================
+                using (var ctx = new CobraPixDbContext(validOpts))
+                {
+                    var backupSvc = new BackupService(ctx);
+                    string relEscapeDb = Path.Combine(confinedDir, "..", "outside", "escaped_rel.db");
+                    string absEscapeDb = Path.Combine(outsideDir, "escaped_abs.db");
+
+                    await AssertThrowsAsync<InvalidOperationException>(results, "3a. RestoreBackupAsync bloqueia caminho relativo com '..' escapando da sandbox", async () =>
+                    {
+                        await backupSvc.RestoreBackupAsync(validCpbPath, relEscapeDb);
+                    });
+
+                    await AssertThrowsAsync<InvalidOperationException>(results, "3b. RestoreBackupAsync bloqueia caminho absoluto fora da sandbox", async () =>
+                    {
+                        await backupSvc.RestoreBackupAsync(validCpbPath, absEscapeDb);
+                    });
+
+                    AssertThrows<InvalidOperationException>(results, "3c. DatabasePath.GetDatabaseFilePath bloqueia travessia relativa '..'", () =>
+                    {
+                        Environment.SetEnvironmentVariable(DatabasePath.DatabasePathEnvVar, relEscapeDb);
+                        try
+                        {
+                            _ = DatabasePath.GetDatabaseFilePath();
+                        }
+                        finally
+                        {
+                            Environment.SetEnvironmentVariable(DatabasePath.DatabasePathEnvVar, validTestDb);
+                        }
+                    });
+
+                    if (Directory.EnumerateFileSystemEntries(outsideDir).Any())
+                    {
+                        throw new Exception("FALHA DE ISOLAMENTO: Arquivos foram criados em outsideDir apos tentativa de escape!");
+                    }
+                    results.Add("[PASS] 3d. Comprovado zero escrita fora da sandbox apos bloqueio de caminhos relativos e absolutos");
+                }
+
+                // =========================================================================
+                // CATEGORIA 6: Inicialização de ViewModels sem efeitos no Registro do Windows
+                // =========================================================================
+                using (var ctx = new CobraPixDbContext(validOpts))
+                {
+                    ConfiguracoesViewModel.ResetTestSimulatedRegistry(false);
+                    var paySvc = new PaymentService(ctx);
+                    var monSvc = new MonthlyCustomerService(ctx);
+                    var notifSvc = new NotificationService(ctx, paySvc, monSvc);
+                    var backupSvc = new BackupService(ctx);
+                    var proSvc = new ProService(ctx);
+                    var themeSvc = new ThemeService(ctx);
+
+                    var configVm = new ConfiguracoesViewModel(notifSvc, backupSvc, proSvc, themeSvc);
+                    await Task.Delay(50);
+
+                    string? afterCtorRegistryValue = ReadRegistryRunValueInternal();
+                    if (!string.Equals(initialRegistryValue, afterCtorRegistryValue, StringComparison.Ordinal))
+                    {
+                        throw new Exception($"FALHA DE REGISTRO: Construtor de ConfiguracoesViewModel alterou HKCU Run! Antes='{initialRegistryValue}', Depois='{afterCtorRegistryValue}'");
+                    }
+
+                    await configVm.SetStartWithWindowsAsync(true);
+                    if (!ConfiguracoesViewModel.GetTestSimulatedRegistryState())
+                        throw new Exception("Estado simulado de registro em memoria deveria ser true.");
+
+                    string? afterEnableRegistryValue = ReadRegistryRunValueInternal();
+                    if (!string.Equals(initialRegistryValue, afterEnableRegistryValue, StringComparison.Ordinal))
+                    {
+                        throw new Exception($"FALHA DE REGISTRO: SetStartWithWindowsAsync(true) alterou HKCU Run! Antes='{initialRegistryValue}', Depois='{afterEnableRegistryValue}'");
+                    }
+
+                    await configVm.SetStartWithWindowsAsync(false);
+                    if (ConfiguracoesViewModel.GetTestSimulatedRegistryState())
+                        throw new Exception("Estado simulado de registro em memoria deveria ser false.");
+
+                    string? afterDisableRegistryValue = ReadRegistryRunValueInternal();
+                    if (!string.Equals(initialRegistryValue, afterDisableRegistryValue, StringComparison.Ordinal))
+                    {
+                        throw new Exception($"FALHA DE REGISTRO: SetStartWithWindowsAsync(false) alterou HKCU Run! Antes='{initialRegistryValue}', Depois='{afterDisableRegistryValue}'");
+                    }
+
+                    results.Add("[PASS] 6. Inicializacao de ConfiguracoesViewModel e SetStartWithWindowsAsync sem efeito no Registro real");
+                }
+
+                // =========================================================================
+                // CATEGORIA 7: Tentativa de gravação de recibos ou sons fora da sandbox
+                // =========================================================================
+                using (var ctx = new CobraPixDbContext(validOpts))
+                {
+                    var pdfSvc = new ReceiptPdfService(ctx);
+                    var dummyTx = new FinancialTransaction
+                    {
+                        Id = 1,
+                        ClientName = "Cliente Recibo",
+                        Description = "Parcela 1/1",
+                        Amount = 100m,
+                        OriginalAmount = 100m,
+                        TotalPaid = 100m,
+                        RemainingBalance = 0m,
+                        PaymentDate = DateTime.Now,
+                        TransactionType = FinancialTransactionType.Installment,
+                        PaymentMethod = PaymentMethod.Pix
+                    };
+
+                    string outsidePdf = Path.Combine(outsideDir, "recibo_fora.pdf");
+                    string junctionPdf = Path.Combine(junctionEscape, "recibo_junction.pdf");
+                    string prodPdf = Path.Combine(prodDir, "receipts", "recibo_prod.pdf");
+
+                    AssertThrows<InvalidOperationException>(results, "7a. ReceiptPdfService.GenerateAndSaveReceipt bloqueia caminho fora da sandbox", () =>
+                    {
+                        pdfSvc.GenerateAndSaveReceipt(dummyTx, outsidePdf);
+                    });
+
+                    AssertThrows<InvalidOperationException>(results, "7b. ReceiptPdfService.GenerateAndSaveReceipt bloqueia caminho via NTFS junction", () =>
+                    {
+                        pdfSvc.GenerateAndSaveReceipt(dummyTx, junctionPdf);
+                    });
+
+                    AssertThrows<InvalidOperationException>(results, "7c. ReceiptPdfService.GenerateAndSaveReceipt bloqueia pasta de recibos de producao", () =>
+                    {
+                        pdfSvc.GenerateAndSaveReceipt(dummyTx, prodPdf);
+                    });
+
+                    if (File.Exists(outsidePdf) || Directory.EnumerateFileSystemEntries(outsideDir).Any())
+                        throw new Exception("FALHA: Recibo PDF foi gravado fora da sandbox!");
+
+                    string validWavSource = Path.Combine(confinedDir, "source_beep.wav");
+                    File.WriteAllBytes(validWavSource, new byte[] { 0x52, 0x49, 0x46, 0x46 });
+
+                    var paySvc = new PaymentService(ctx);
+                    var monSvc = new MonthlyCustomerService(ctx);
+                    var notifSvc = new NotificationService(ctx, paySvc, monSvc);
+                    var backupSvc = new BackupService(ctx);
+                    var proSvc = new ProService(ctx);
+                    var themeSvc = new ThemeService(ctx);
+                    var configVm = new ConfiguracoesViewModel(notifSvc, backupSvc, proSvc, themeSvc);
+
+                    Environment.SetEnvironmentVariable(ConfiguracoesViewModel.SoundsDirectoryEnvVar, Path.Combine(outsideDir, "sounds"));
+                    configVm.SelectAudioFileDialogFunc = () => validWavSource;
+                    await AssertThrowsAsync<InvalidOperationException>(results, "7d. SelectCustomSoundAsync bloqueia COBRAPIX_SOUNDS_DIRECTORY fora da sandbox", async () =>
+                    {
+                        await configVm.SelectCustomSoundAsync();
+                    });
+
+                    Environment.SetEnvironmentVariable(ConfiguracoesViewModel.SoundsDirectoryEnvVar, Path.Combine(junctionEscape, "sounds"));
+                    await AssertThrowsAsync<InvalidOperationException>(results, "7e. SelectCustomSoundAsync bloqueia COBRAPIX_SOUNDS_DIRECTORY via NTFS junction", async () =>
+                    {
+                        await configVm.SelectCustomSoundAsync();
+                    });
+
+                    Environment.SetEnvironmentVariable(ConfiguracoesViewModel.SoundsDirectoryEnvVar, validSoundsDir);
+                    string outsideWav = Path.Combine(outsideDir, "outside.wav");
+                    configVm.SelectAudioFileDialogFunc = () => outsideWav;
+                    await AssertThrowsAsync<InvalidOperationException>(results, "7f. SelectCustomSoundAsync bloqueia arquivo de origem fora da sandbox", async () =>
+                    {
+                        await configVm.SelectCustomSoundAsync();
+                    });
+
+                    if (Directory.EnumerateFileSystemEntries(outsideDir).Any())
+                        throw new Exception("FALHA: Arquivos ou pastas de som foram criados em outsideDir!");
+
+                    results.Add("[PASS] 7g. Comprovado zero escrita de recibos ou sons fora da sandbox");
+                }
+
+                // =========================================================================
+                // CATEGORIA 8: Erro de diretório no backup automático vs Falha de Segurança
+                // =========================================================================
+                string invalidDirInsideSandbox;
+                using (var ctx = new CobraPixDbContext(validOpts))
+                {
+                    var backupSvc = new BackupService(ctx);
+                    await backupSvc.SetAutoBackupEnabledAsync(true);
+
+                    string blockingFile = Path.Combine(confinedDir, "arquivo_bloqueante.tmp");
+                    File.WriteAllText(blockingFile, "bloqueio");
+                    invalidDirInsideSandbox = Path.Combine(blockingFile, "subpasta_impossivel");
+
+                    var resOperationalError = await backupSvc.CheckAndPerformDailyAutoBackupAsync(
+                        customSourceDb: validTestDb,
+                        customTargetDir: invalidDirInsideSandbox,
+                        force: true);
+
+                    if (resOperationalError == null || resOperationalError.Success)
+                    {
+                        throw new Exception("8a. CheckAndPerformDailyAutoBackupAsync deveria retornar BackupResult { Success = false } para erro operacional de diretorio.");
+                    }
+
+                    var recordedError = await ctx.AppSettings.FirstOrDefaultAsync(s => s.Key == BackupService.SettingKeyLastAutoBackupError);
+                    if (recordedError == null || string.IsNullOrWhiteSpace(recordedError.Value))
+                    {
+                        throw new Exception("8a. CheckAndPerformDailyAutoBackupAsync nao registrou SettingKeyLastAutoBackupError no banco.");
+                    }
+                    results.Add($"[PASS] 8a. Erro operacional de diretorio no auto-backup tratado e registrado ({recordedError.Value})");
+
+                    await AssertThrowsAsync<InvalidOperationException>(results, "8b. CheckAndPerformDailyAutoBackupAsync NAO oculta falha de seguranca (diretorio de producao)", async () =>
+                    {
+                        await backupSvc.CheckAndPerformDailyAutoBackupAsync(
+                            customSourceDb: validTestDb,
+                            customTargetDir: Path.Combine(prodDir, "auto_backups"),
+                            force: true);
+                    });
+
+                    await AssertThrowsAsync<InvalidOperationException>(results, "8c. CheckAndPerformDailyAutoBackupAsync NAO oculta falha de seguranca (fuga via junction)", async () =>
+                    {
+                        await backupSvc.CheckAndPerformDailyAutoBackupAsync(
+                            customSourceDb: validTestDb,
+                            customTargetDir: junctionEscape,
+                            force: true);
+                    });
+                }
+
+                // =========================================================================
+                // CATEGORIA 9: RunAutoBackupNowAsync - Exceção de Segurança vs Erro Operacional (Tarefa 3)
+                // =========================================================================
+                using (var ctx = new CobraPixDbContext(validOpts))
+                {
+                    var paySvc = new PaymentService(ctx);
+                    var monSvc = new MonthlyCustomerService(ctx);
+                    var notifSvc = new NotificationService(ctx, paySvc, monSvc);
+                    var backupSvc = new BackupService(ctx);
+                    var proSvc = new ProService(ctx);
+                    var themeSvc = new ThemeService(ctx);
+
+                    // 9a. RunAutoBackupNowAsync relança [SEGURANÇA DE EXECUÇÃO]
+                    Environment.SetEnvironmentVariable(BackupService.BackupDirectoryEnvVar, Path.Combine(prodDir, "auto_backups"));
+                    var configVmSecurity = new ConfiguracoesViewModel(notifSvc, backupSvc, proSvc, themeSvc);
+                    await AssertThrowsAsync<InvalidOperationException>(results, "9a. RunAutoBackupNowAsync propaga [SEGURANÇA DE EXECUÇÃO]", async () =>
+                    {
+                        await configVmSecurity.RunAutoBackupNowAsync();
+                    });
+
+                    // 9b. RunAutoBackupNowAsync trata erro operacional comum sem relançar exceção
+                    Environment.SetEnvironmentVariable(BackupService.BackupDirectoryEnvVar, invalidDirInsideSandbox);
+                    var configVmOperational = new ConfiguracoesViewModel(notifSvc, backupSvc, proSvc, themeSvc);
+                    await configVmOperational.RunAutoBackupNowAsync();
+                    if (string.IsNullOrWhiteSpace(configVmOperational.LastAutoBackupInfo) || !configVmOperational.LastAutoBackupInfo.Contains("Diretório de backup inacessível"))
+                    {
+                        throw new Exception("9b. RunAutoBackupNowAsync deveria atualizar LastAutoBackupInfo com mensagem de erro operacional.");
+                    }
+                    results.Add("[PASS] 9b. RunAutoBackupNowAsync tratou erro operacional comum sem relancar excecao");
+
+                    // Restaura diretório de backup válido para garantir hermeticidade
+                    Environment.SetEnvironmentVariable(BackupService.BackupDirectoryEnvVar, validBackupDir);
+                }
+
+                // =========================================================================
+                // CATEGORIA 10: OpenAutoBackupFolder em modo de teste (Tarefa 4)
+                // =========================================================================
+                using (var ctx = new CobraPixDbContext(validOpts))
+                {
+                    var paySvc = new PaymentService(ctx);
+                    var monSvc = new MonthlyCustomerService(ctx);
+                    var notifSvc = new NotificationService(ctx, paySvc, monSvc);
+                    var backupSvc = new BackupService(ctx);
+                    var proSvc = new ProService(ctx);
+                    var themeSvc = new ThemeService(ctx);
+                    var configVm = new ConfiguracoesViewModel(notifSvc, backupSvc, proSvc, themeSvc);
+
+                    bool processAttempted = false;
+                    configVm.ProcessStarterFunc = _ =>
+                    {
+                        processAttempted = true;
+                        throw new InvalidOperationException("VIOLAÇÃO DE SEGURANÇA: ProcessStarterFunc foi invocado indevidamente em modo de teste!");
+                    };
+
+                    // 10a. OpenAutoBackupFolder encerra de forma no-op em modo de teste sem iniciar processos (com diretório nulo/vazio)
+                    configVm.OpenAutoBackupFolder();
+                    if (processAttempted)
+                    {
+                        throw new Exception("10a FALHOU: OpenAutoBackupFolder tentou iniciar processo externo em modo de teste!");
+                    }
+
+                    // 10b. OpenAutoBackupFolder encerra de forma no-op mesmo quando há diretório configurado
+                    await configVm.LoadAutoBackupInfoAsync();
+                    configVm.OpenAutoBackupFolder();
+                    if (processAttempted)
+                    {
+                        throw new Exception("10b FALHOU: OpenAutoBackupFolder tentou iniciar processo externo com diretório configurado!");
+                    }
+
+                    results.Add("[PASS] 10a. OpenAutoBackupFolder encerrou de forma no-op em modo de teste sem iniciar processos externos (verificado via interceptador)");
+                }
+
+                results.Add("==================================================");
+                results.Add("TODOS OS TESTES NEGATIVOS DE ISOLAMENTO E SEGURANÇA FORAM APROVADOS COM SUCESSO!");
+                results.Add("==================================================");
+                return results;
+            }
+            finally
+            {
+                // Restauração das variáveis de ambiente
+                Environment.SetEnvironmentVariable(DatabasePath.ExecutionModeEnvVar, prevMode);
+                Environment.SetEnvironmentVariable(DatabasePath.AllowTestDbEnvVar, prevAllow);
+                Environment.SetEnvironmentVariable(DatabasePath.SandboxRootEnvVar, prevSandbox);
+                Environment.SetEnvironmentVariable(DatabasePath.DatabasePathEnvVar, prevDb);
+                Environment.SetEnvironmentVariable(BackupService.BackupDirectoryEnvVar, prevBackupDir);
+                Environment.SetEnvironmentVariable(ReceiptPdfService.ReceiptsDirectoryEnvVar, prevReceiptsDir);
+                Environment.SetEnvironmentVariable(ConfiguracoesViewModel.SoundsDirectoryEnvVar, prevSoundsDir);
+                CreditProductionSafetyGuard.SetTestProductionPathOverride(null);
+
+                SqliteConnection.ClearAllPools();
+                try
+                {
+                    if (Directory.Exists(junctionEscape))
+                    {
+                        var psi = new System.Diagnostics.ProcessStartInfo("cmd.exe", $"/c rmdir \"{junctionEscape}\"")
+                        {
+                            CreateNoWindow = true,
+                            UseShellExecute = false
+                        };
+                        System.Diagnostics.Process.Start(psi)?.WaitForExit();
+                    }
+                    if (Directory.Exists(scratchRoot))
+                    {
+                        Directory.Delete(scratchRoot, true);
+                    }
+                }
+                catch { }
+            }
+        }
+
+        private static string? ReadRegistryRunValueInternal()
+        {
+            try
+            {
+                using var key = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", writable: false);
+                return key?.GetValue("CobraPixPC") as string;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static void AssertThrows<TException>(List<string> results, string testName, Action action, bool requireSecurityMarker = true) where TException : Exception
+        {
+            bool threw = false;
+            try
+            {
+                action();
+            }
+            catch (TException ex)
+            {
+                threw = true;
+                if (requireSecurityMarker && typeof(TException) == typeof(InvalidOperationException))
+                {
+                    if (!ex.Message.Contains("[SEGURANÇA DE EXECUÇÃO]", StringComparison.Ordinal))
+                    {
+                        throw new Exception($"FAILED: {testName} lançou {ex.GetType().Name}, mas a mensagem não contém '[SEGURANÇA DE EXECUÇÃO]'. Mensagem: {ex.Message}");
+                    }
+                }
+                results.Add($"[PASS] {testName} -> {ex.GetType().Name}: {ex.Message.Split('\n')[0]}");
+            }
+            if (!threw)
+            {
+                throw new Exception($"FAILED: {testName} did NOT throw {typeof(TException).Name}");
+            }
+        }
+
+        private static async Task AssertThrowsAsync<TException>(List<string> results, string testName, Func<Task> action, bool requireSecurityMarker = true) where TException : Exception
+        {
+            bool threw = false;
+            try
+            {
+                await action();
+            }
+            catch (TException ex)
+            {
+                threw = true;
+                if (requireSecurityMarker && typeof(TException) == typeof(InvalidOperationException))
+                {
+                    if (!ex.Message.Contains("[SEGURANÇA DE EXECUÇÃO]", StringComparison.Ordinal))
+                    {
+                        throw new Exception($"FAILED: {testName} lançou {ex.GetType().Name}, mas a mensagem não contém '[SEGURANÇA DE EXECUÇÃO]'. Mensagem: {ex.Message}");
+                    }
+                }
+                results.Add($"[PASS] {testName} -> {ex.GetType().Name}: {ex.Message.Split('\n')[0]}");
+            }
+            if (!threw)
+            {
+                throw new Exception($"FAILED: {testName} did NOT throw {typeof(TException).Name}");
             }
         }
     }

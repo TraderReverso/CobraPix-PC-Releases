@@ -124,6 +124,7 @@ namespace CobraPix_PC.ViewModels
         public ICommand SetFilterCommand { get; }
         public ICommand ClearSearchCommand { get; }
         public ICommand OpenPaymentCommand { get; }
+        public ICommand DeleteInstallmentCommand { get; }
 
         public ParcelasViewModel()
             : this(App.Services?.GetService<IPaymentService>() ?? new PaymentService(new CobraPixDbContext()), null)
@@ -151,6 +152,30 @@ namespace CobraPix_PC.ViewModels
                 if (target != null)
                 {
                     _onOpenPayment?.Invoke(target.Id);
+                }
+            });
+
+            DeleteInstallmentCommand = new RelayCommand<InstallmentItemViewModel>(async item =>
+            {
+                var target = item ?? SelectedInstallment;
+                if (target == null) return;
+
+                if (target.IsPaid || target.TotalPaid > 0)
+                {
+                    HasError = true;
+                    ErrorMessage = "Não é possível excluir uma parcela com pagamentos registrados. Estorne os pagamentos no histórico primeiro.";
+                    return;
+                }
+
+                try
+                {
+                    await _paymentService.DeleteInstallmentAsync(target.Id);
+                    await LoadInstallmentsAsync();
+                }
+                catch (Exception ex)
+                {
+                    HasError = true;
+                    ErrorMessage = ex.Message;
                 }
             });
 

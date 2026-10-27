@@ -27,6 +27,8 @@ namespace CobraPix_PC.Services
         private readonly Action? _soundPlayer;
         private readonly Action<NotificationItem>? _presenter;
 
+        internal CobraPixDbContext DbContext => _context;
+
         // Chaves para persistência na tabela AppSettings
         private const string SettingKeyNotificationsEnabled = "Notification.Enabled";
         private const string SettingKeySoundEnabled = "Notification.SoundEnabled";
@@ -183,7 +185,8 @@ namespace CobraPix_PC.Services
 
         public async Task<List<NotificationItem>> CheckNotificationsAsync(DateTime? referenceDate = null)
         {
-            DateTime today = (referenceDate ?? DateTime.Today).Date;
+            DateTime now = referenceDate ?? DateTime.Now;
+            DateTime today = now.Date;
             var settings = await GetSettingsAsync();
 
             var result = new List<NotificationItem>();
@@ -473,6 +476,41 @@ namespace CobraPix_PC.Services
                 }
             }
 
+            // ================================================================
+            // 4. ANÁLISE DE LEMBRETES E TAREFAS PENDENTES
+            // ================================================================
+            try
+            {
+                var dueReminders = await _context.Reminders
+                    .AsNoTracking()
+                    .Where(r => r.Status == ReminderStatus.Pending && r.DueDate.HasValue && r.DueDate.Value <= now)
+                    .ToListAsync();
+
+                foreach (var rem in dueReminders)
+                {
+                    var remDueDate = rem.DueDate!.Value;
+                    bool isOverdue = (now - remDueDate).TotalMinutes > 2;
+                    string prefix = isOverdue ? "Lembrete atrasado" : "Lembrete";
+                    string timeStr = remDueDate.ToString("dd/MM HH:mm");
+
+                    result.Add(new NotificationItem
+                    {
+                        Title = $"{prefix}: {rem.Title}",
+                        Message = string.IsNullOrWhiteSpace(rem.Description)
+                            ? $"Vencimento: {timeStr} | Prioridade: {rem.PriorityLabel}"
+                            : $"{rem.Description} (Venc: {timeStr})",
+                        Type = NotificationType.Lembrete,
+                        ClientName = rem.Category,
+                        Amount = 0,
+                        DeduplicationKey = $"Lembrete:{rem.Id}:{remDueDate:yyyyMMdd_HHmm}:{rem.SnoozeCount}"
+                    });
+                }
+            }
+            catch
+            {
+                // Resiliente caso a tabela esteja sendo inicializada
+            }
+
             return result;
         }
 
@@ -496,7 +534,8 @@ namespace CobraPix_PC.Services
 
             foreach (var item in candidates)
             {
-                bool alreadyNotified = !force && await HasBeenNotifiedTodayAsync(item.DeduplicationKey, today);
+                bool alreadyNotified = (!force || item.Type == NotificationType.Lembrete)
+                    && await HasBeenNotifiedTodayAsync(item.DeduplicationKey, today);
                 if (!alreadyNotified)
                 {
                     toNotify.Add(item);
@@ -711,9 +750,9 @@ namespace CobraPix_PC.Services
                     });
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Tratamento seguro caso não haja interface gráfica ativa (ex: testes sem UI)
+                DiagnosticLogger.Instance.LogError("NotificationService", ex, "Falha ao apresentar notificação visual toast");
             }
         }
 
@@ -751,41 +790,104 @@ namespace CobraPix_PC.Services
                 return 0;
             }
 
-            var validSlots = settings.GetValidTimeSpans();
-            if (validSlots.Count == 0)
-            {
-                return 0;
-            }
+            int totalNotified = 0;
 
-            // Verifica se a hora e o minuto atuais coincidem com algum dos horários configurados
-            bool matchesAnySlot = false;
-            TimeSpan matchedSlot = TimeSpan.Zero;
-            foreach (var slot in validSlots)
+            // 1. Verificação contínua em tempo real de Lembretes & Tarefas pendentes
+            totalNotified += await CheckDueRemindersOnlyAsync(now, settings);
+
+            // 2. Verificação de horários programados para parcelas e mensalidades (lotes diários)
+            var validSlots = settings.GetValidTimeSpans();
+            if (validSlots.Count > 0)
             {
-                if (slot.Hours == now.Hour && slot.Minutes == now.Minute)
+                bool matchesAnySlot = false;
+                TimeSpan matchedSlot = TimeSpan.Zero;
+                foreach (var slot in validSlots)
                 {
-                    matchesAnySlot = true;
-                    matchedSlot = slot;
-                    break;
+                    if (slot.Hours == now.Hour && slot.Minutes == now.Minute)
+                    {
+                        matchesAnySlot = true;
+                        matchedSlot = slot;
+                        break;
+                    }
+                }
+
+                if (matchesAnySlot)
+                {
+                    // Deduplicação por horário para não disparar múltiplas vezes dentro do mesmo minuto
+                    string slotDeduplicationKey = $"ScheduledSlotFired:{now:yyyy-MM-dd}_{matchedSlot.Hours:D2}:{matchedSlot.Minutes:D2}";
+                    bool alreadyFiredForSlot = await HasBeenNotifiedTodayAsync(slotDeduplicationKey, now.Date);
+                    if (!alreadyFiredForSlot)
+                    {
+                        await MarkAsNotifiedAsync(slotDeduplicationKey, now.Date);
+                        LastVerificationTime = now;
+                        totalNotified += await CheckAndNotifyAsync(now.Date, force: true);
+                    }
                 }
             }
 
-            if (!matchesAnySlot)
+            return totalNotified;
+        }
+
+        public async Task<int> CheckDueRemindersOnlyAsync(DateTime now, NotificationSettings? settings = null)
+        {
+            try
+            {
+                var s = settings ?? _cachedSettings ?? await GetSettingsAsync();
+                if (!s.NotificationsEnabled) return 0;
+
+                var dueReminders = await _context.Reminders
+                    .AsNoTracking()
+                    .Where(r => r.Status == ReminderStatus.Pending && r.DueDate.HasValue && r.DueDate.Value <= now)
+                    .ToListAsync();
+
+                if (dueReminders.Count == 0) return 0;
+
+                var toNotify = new List<NotificationItem>();
+                foreach (var rem in dueReminders)
+                {
+                    var remDueDate = rem.DueDate!.Value;
+                    string key = $"Lembrete:{rem.Id}:{remDueDate:yyyyMMdd_HHmm}:{rem.SnoozeCount}";
+                    bool alreadyNotified = await HasBeenNotifiedTodayAsync(key, now.Date);
+                    if (!alreadyNotified)
+                    {
+                        bool isOverdue = (now - remDueDate).TotalMinutes > 2;
+                        string prefix = isOverdue ? "Lembrete atrasado" : "Lembrete";
+                        string timeStr = remDueDate.ToString("dd/MM HH:mm");
+
+                        toNotify.Add(new NotificationItem
+                        {
+                            Title = $"{prefix}: {rem.Title}",
+                            Message = string.IsNullOrWhiteSpace(rem.Description)
+                                ? $"Vencimento: {timeStr} | Prioridade: {rem.PriorityLabel}"
+                                : $"{rem.Description} (Venc: {timeStr})",
+                            Type = NotificationType.Lembrete,
+                            ClientName = rem.Category,
+                            Amount = 0,
+                            DeduplicationKey = key
+                        });
+                    }
+                }
+
+                if (toNotify.Count == 0) return 0;
+
+                foreach (var item in toNotify)
+                {
+                    await MarkAsNotifiedAsync(item.DeduplicationKey, now.Date);
+                    Notify(item);
+                }
+
+                if (s.SoundEnabled)
+                {
+                    PlayNotificationSound();
+                }
+
+                LastVerificationTime = now;
+                return toNotify.Count;
+            }
+            catch
             {
                 return 0;
             }
-
-            // Deduplicação por horário para não disparar múltiplas vezes dentro do mesmo minuto
-            string slotDeduplicationKey = $"ScheduledSlotFired:{now:yyyy-MM-dd}_{matchedSlot.Hours:D2}:{matchedSlot.Minutes:D2}";
-            bool alreadyFiredForSlot = await HasBeenNotifiedTodayAsync(slotDeduplicationKey, now.Date);
-            if (alreadyFiredForSlot)
-            {
-                return 0;
-            }
-
-            await MarkAsNotifiedAsync(slotDeduplicationKey, now.Date);
-            LastVerificationTime = now;
-            return await CheckAndNotifyAsync(now.Date, force: true);
         }
     }
 }

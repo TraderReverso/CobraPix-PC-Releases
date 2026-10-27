@@ -17,6 +17,8 @@ namespace CobraPix_PC.Models.Credit
 
         public long AmountCents { get; set; }
 
+        public string FormattedAmount => (AmountCents / 100.0).ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
+
         public CreditPaymentStatus Status { get; set; } = CreditPaymentStatus.Active;
 
         public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;

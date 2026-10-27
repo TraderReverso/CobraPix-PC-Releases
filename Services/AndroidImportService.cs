@@ -173,6 +173,29 @@ namespace CobraPix_PC.Services
         {
             var result = new AndroidImportResult();
 
+            // 0. Determina e valida estritamente o banco de dados alvo ANTES de qualquer efeito colateral
+            string? contextDbPath = null;
+            if (!string.IsNullOrWhiteSpace(targetDatabasePath))
+            {
+                // Se targetDatabasePath foi fornecido explicitamente, valida-o imediatamente
+                _ = DatabasePath.ValidateAndResolveTargetDatabasePath(targetDatabasePath, "Importação de backup Android");
+            }
+            else if (_context != null)
+            {
+                try
+                {
+                    contextDbPath = _context.Database.GetDbConnection().DataSource;
+                }
+                catch (InvalidOperationException ex) when (ex.Message.Contains("[SEGURANÇA DE EXECUÇÃO]", StringComparison.Ordinal))
+                {
+                    throw;
+                }
+                catch { }
+            }
+
+            string candidateTargetDb = targetDatabasePath ?? (!string.IsNullOrEmpty(contextDbPath) ? contextDbPath : DatabasePath.GetDatabaseFilePath());
+            string targetDb = DatabasePath.ValidateAndResolveTargetDatabasePath(candidateTargetDb, "Importação de backup Android");
+
             // 1. Verificação do arquivo
             if (string.IsNullOrWhiteSpace(backupFilePath) || !File.Exists(backupFilePath))
             {
@@ -253,18 +276,7 @@ namespace CobraPix_PC.Services
             if (expenses.Count > 0)
                 result.Warnings.Add($"{expenses.Count} despesa(s) encontrada(s) no backup Android. O CobraPix PC não possui módulo de despesas; nenhum registro foi convertido ou descartado do banco Android.");
 
-            // 5. Determina banco alvo e cria safety backup
-            string? contextDbPath = null;
-            if (_context != null)
-            {
-                try
-                {
-                    contextDbPath = _context.Database.GetDbConnection().DataSource;
-                }
-                catch { }
-            }
-
-            string targetDb = targetDatabasePath ?? (!string.IsNullOrEmpty(contextDbPath) ? contextDbPath : DatabasePath.GetDatabaseFilePath());
+            // 5. Garante diretório do banco alvo (já validado) e cria safety backup
             string? targetDir = Path.GetDirectoryName(targetDb);
             if (!string.IsNullOrEmpty(targetDir) && !Directory.Exists(targetDir))
                 Directory.CreateDirectory(targetDir);

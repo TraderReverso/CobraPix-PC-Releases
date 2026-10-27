@@ -48,8 +48,21 @@ namespace CobraPix_PC.Services.Credit
             if (req.TotalInterestCents < 0)
                 throw new ArgumentException("Os juros totais não podem ser negativos.", nameof(req.TotalInterestCents));
 
-            if (req.InstallmentsCount <= 0)
-                throw new ArgumentException("A quantidade de parcelas deve ser pelo menos 1.", nameof(req.InstallmentsCount));
+            if (req.InstallmentsCount <= 0 || req.InstallmentsCount > 360)
+                throw new ArgumentException("A quantidade de parcelas deve estar entre 1 e 360.", nameof(req.InstallmentsCount));
+
+            if (!Enum.IsDefined(typeof(CreditPeriodicity), req.Periodicity))
+                throw new ArgumentException("Periodicidade de contrato inválida.", nameof(req.Periodicity));
+
+            if (req.Periodicity == CreditPeriodicity.CustomDays)
+            {
+                if (!req.CustomIntervalDays.HasValue || req.CustomIntervalDays.Value < 1 || req.CustomIntervalDays.Value > 365)
+                    throw new ArgumentException("Para periodicidade personalizada, o intervalo de dias deve ser entre 1 e 365.", nameof(req.CustomIntervalDays));
+            }
+            else
+            {
+                req.CustomIntervalDays = null;
+            }
 
             if (string.IsNullOrWhiteSpace(req.ContractNumber))
                 throw new ArgumentException("O número do contrato é obrigatório.", nameof(req.ContractNumber));
@@ -83,6 +96,8 @@ namespace CobraPix_PC.Services.Credit
                         ClientId = req.ClientId,
                         ContractNumber = req.ContractNumber.Trim(),
                         ContractType = CreditContractType.FixedInstallments,
+                        Periodicity = req.Periodicity,
+                        CustomIntervalDays = req.Periodicity == CreditPeriodicity.CustomDays ? req.CustomIntervalDays : null,
                         Status = CreditContractStatus.Draft,
                         DisbursedPrincipalCents = req.PrincipalAmountCents,
                         TotalNominalInterestCents = req.TotalInterestCents,
@@ -93,22 +108,13 @@ namespace CobraPix_PC.Services.Credit
                     };
                     ctx.CreditContracts.Add(contract);
 
-                    // Decomposição exata das parcelas em centavos inteiros
-                    long basePrincipal = req.PrincipalAmountCents / req.InstallmentsCount;
-                    long remPrincipal = req.PrincipalAmountCents % req.InstallmentsCount;
-
-                    long baseInterest = req.TotalInterestCents / req.InstallmentsCount;
-                    long remInterest = req.TotalInterestCents % req.InstallmentsCount;
+                    // Decomposição exata das parcelas em centavos inteiros com resíduos determinísticos
+                    var partitions = DistributeInstallments(req.PrincipalAmountCents, req.TotalInterestCents, req.InstallmentsCount);
 
                     for (int i = 1; i <= req.InstallmentsCount; i++)
                     {
-                        // Resíduo de divisão alocado na primeira parcela para soma matemática perfeita
-                        long instPrincipal = basePrincipal + (i == 1 ? remPrincipal : 0);
-                        long instInterest = baseInterest + (i == 1 ? remInterest : 0);
-                        long instTotal = instPrincipal + instInterest;
-
-                        // Vencimento em dias civis corridos (sem postergação para dia útil)
-                        DateTime dueDate = req.FirstDueDate.AddMonths(i - 1);
+                        var (instPrincipal, instInterest, instTotal) = partitions[i - 1];
+                        DateTime dueDate = CalculateDueDate(req.FirstDueDate, req.Periodicity, i, req.CustomIntervalDays);
 
                         var installment = new CreditInstallment
                         {
@@ -137,7 +143,9 @@ namespace CobraPix_PC.Services.Credit
                             contract.ContractNumber,
                             req.PrincipalAmountCents,
                             req.TotalInterestCents,
-                            req.InstallmentsCount
+                            req.InstallmentsCount,
+                            Periodicity = contract.Periodicity.ToString(),
+                            contract.CustomIntervalDays
                         }),
                         CreatedAtUtc = DateTime.UtcNow
                     });
@@ -147,10 +155,110 @@ namespace CobraPix_PC.Services.Credit
                         ContractId = contract.Id,
                         ContractNumber = contract.ContractNumber,
                         Status = contract.Status,
+                        Periodicity = contract.Periodicity,
+                        CustomIntervalDays = contract.CustomIntervalDays,
                         TotalAmountCents = contract.TotalAmountCents,
                         InstallmentsGenerated = req.InstallmentsCount
                     };
                 });
+        }
+
+        /// <summary>
+        /// Calcula determinística e independentemente a data de vencimento de uma parcela.
+        /// Preserva dias civis de calendário, evita drift cumulativo e valida limites.
+        /// </summary>
+        public static DateTime CalculateDueDate(
+            DateTime firstDueDate,
+            CreditPeriodicity periodicity,
+            int installmentNumber,
+            int? customIntervalDays = null)
+        {
+            if (installmentNumber < 1)
+                throw new ArgumentOutOfRangeException(nameof(installmentNumber), "O número da parcela deve ser maior ou igual a 1.");
+
+            int offset = installmentNumber - 1;
+            if (offset == 0) return firstDueDate.Date;
+
+            switch (periodicity)
+            {
+                case CreditPeriodicity.Daily:
+                    return firstDueDate.Date.AddDays(offset);
+
+                case CreditPeriodicity.Weekly:
+                    return firstDueDate.Date.AddDays(offset * 7);
+
+                case CreditPeriodicity.Biweekly:
+                    // Intervalo estritamente fixo de 15 dias civis corridos
+                    return firstDueDate.Date.AddDays(offset * 15);
+
+                case CreditPeriodicity.Monthly:
+                    // Baseado na data inicial original (D1) com AddMonths determinístico (sem drift de fim de mês)
+                    return firstDueDate.Date.AddMonths(offset);
+
+                case CreditPeriodicity.CustomDays:
+                    if (!customIntervalDays.HasValue || customIntervalDays.Value < 1 || customIntervalDays.Value > 365)
+                    {
+                        throw new ArgumentException("Intervalo personalizado deve estar entre 1 e 365 dias.", nameof(customIntervalDays));
+                    }
+                    return firstDueDate.Date.AddDays(offset * customIntervalDays.Value);
+
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(periodicity), $"Periodicidade '{periodicity}' não suportada.");
+            }
+        }
+
+        /// <summary>
+        /// Distribui determinística e equitativamente o principal e os juros totais entre as parcelas em centavos inteiros.
+        /// Garante:
+        /// 1. Soma exata do principal: sum(P_i) == principalAmountCents
+        /// 2. Soma exata dos juros: sum(J_i) == totalInterestCents
+        /// 3. Soma exata dos totais: sum(T_i) == principalAmountCents + totalInterestCents
+        /// 4. Variação máxima entre parcelas de no máximo 1 centavo: max(T_i) - min(T_i) <= 1
+        /// </summary>
+        public static (long principal, long interest, long total)[] DistributeInstallments(
+            long principalAmountCents,
+            long totalInterestCents,
+            int installmentsCount)
+        {
+            if (installmentsCount <= 0)
+                throw new ArgumentException("A quantidade de parcelas deve ser pelo menos 1.", nameof(installmentsCount));
+
+            long baseP = principalAmountCents / installmentsCount;
+            long remP = principalAmountCents % installmentsCount;
+
+            long baseJ = totalInterestCents / installmentsCount;
+            long remJ = totalInterestCents % installmentsCount;
+
+            var result = new (long principal, long interest, long total)[installmentsCount];
+
+            if (remP + remJ < installmentsCount)
+            {
+                // Caso A: resíduos de P e J cabem sem colisão de 2 centavos na mesma parcela
+                for (int i = 0; i < installmentsCount; i++)
+                {
+                    long addP = (i < remP) ? 1 : 0;
+                    long addJ = (i >= remP && i < remP + remJ) ? 1 : 0;
+                    long p = baseP + addP;
+                    long j = baseJ + addJ;
+                    result[i] = (p, j, p + j);
+                }
+            }
+            else
+            {
+                // Caso B: resíduos somados excedem N. Exatamente k parcelas recebem bônus duplo (+1 P e +1 J)
+                // de modo que cada parcela no total recebe baseT + 1 (quando tem bônus duplo) ou baseT (quando tem bônus simples)
+                long k = remP + remJ - installmentsCount;
+                for (int i = 0; i < installmentsCount; i++)
+                {
+                    long addP = (i < remP) ? 1 : 0;
+                    long addJ = (i < k || (i >= remP && i < installmentsCount)) ? 1 : 0;
+                    long p = baseP + addP;
+                    long j = baseJ + addJ;
+                    result[i] = (p, j, p + j);
+                }
+            }
+
+            return result;
         }
 
         public async Task<DisburseContractResponseDto> DisburseContractAsync(DisburseContractRequestDto req)

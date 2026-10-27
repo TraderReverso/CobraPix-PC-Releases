@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using System.IO;
 using CobraPix_PC.Data;
@@ -37,6 +38,9 @@ namespace CobraPix_PC.ViewModels
     /// </summary>
     public class ConfiguracoesViewModel : ModuleViewModelBase
     {
+        public const string SoundsDirectoryEnvVar = "COBRAPIX_SOUNDS_DIRECTORY";
+
+        private readonly CobraPixDbContext? _dbContext;
         private readonly INotificationService _notificationService;
         private readonly IBackupService? _backupService;
         private readonly IProService? _proService;
@@ -82,6 +86,73 @@ namespace CobraPix_PC.ViewModels
 
         // Propriedades de Tema (Escuro / Claro)
         private AppTheme _currentAppTheme = AppTheme.Dark;
+
+        // Iniciar com o Windows (Fase Boot 1.0.4)
+        private bool _startWithWindows;
+
+        // Chave Pix para Cobranças (Fase 4)
+        public const string PixKeySettingKey = "App.PixKey";
+        private string _pixKey = string.Empty;
+        private string? _pixKeyFeedbackMessage;
+        private bool _hasPixKeyFeedback;
+
+        public string PixKey
+        {
+            get => _pixKey;
+            set
+            {
+                if (SetProperty(ref _pixKey, value))
+                {
+                    HasPixKeyFeedback = false;
+                }
+            }
+        }
+
+        public string? PixKeyFeedbackMessage
+        {
+            get => _pixKeyFeedbackMessage;
+            set => SetProperty(ref _pixKeyFeedbackMessage, value);
+        }
+
+        public bool HasPixKeyFeedback
+        {
+            get => _hasPixKeyFeedback;
+            set => SetProperty(ref _hasPixKeyFeedback, value);
+        }
+
+        public ICommand SavePixKeyCommand { get; }
+
+        // Nome da Empresa / Emissor (Fase 5)
+        public const string CompanyNameSettingKey = "App.CompanyName";
+        private string _companyName = string.Empty;
+        private string? _companyNameFeedbackMessage;
+        private bool _hasCompanyNameFeedback;
+
+        public string CompanyName
+        {
+            get => _companyName;
+            set
+            {
+                if (SetProperty(ref _companyName, value))
+                {
+                    HasCompanyNameFeedback = false;
+                }
+            }
+        }
+
+        public string? CompanyNameFeedbackMessage
+        {
+            get => _companyNameFeedbackMessage;
+            set => SetProperty(ref _companyNameFeedbackMessage, value);
+        }
+
+        public bool HasCompanyNameFeedback
+        {
+            get => _hasCompanyNameFeedback;
+            set => SetProperty(ref _hasCompanyNameFeedback, value);
+        }
+
+        public ICommand SaveCompanyNameCommand { get; }
 
         // Propriedades de Notificações e Áudio
         private bool _notificationsEnabled = true;
@@ -192,6 +263,7 @@ namespace CobraPix_PC.ViewModels
                 {
                     OnPropertyChanged(nameof(IsDarkTheme));
                     OnPropertyChanged(nameof(IsLightTheme));
+                    OnPropertyChanged(nameof(IsGreenYellowTheme));
                     OnPropertyChanged(nameof(ThemeDescriptionText));
                 }
             }
@@ -199,13 +271,39 @@ namespace CobraPix_PC.ViewModels
 
         public bool IsDarkTheme => CurrentAppTheme == AppTheme.Dark;
         public bool IsLightTheme => CurrentAppTheme == AppTheme.Light;
-        public string ThemeDescriptionText => IsDarkTheme
-            ? "Escuro (Estética Solo Leveling)"
-            : "Claro (Visual Comercial)";
+        public bool IsGreenYellowTheme => CurrentAppTheme == AppTheme.GreenYellow;
+        public string ThemeDescriptionText => CurrentAppTheme switch
+        {
+            AppTheme.Dark => "Escuro (Estética Solo Leveling)",
+            AppTheme.Light => "Claro (Visual Comercial)",
+            AppTheme.GreenYellow => "Verde/Amarelo (Identidade CobraPix)",
+            _ => "Escuro (Estética Solo Leveling)"
+        };
 
         public ICommand SetDarkThemeCommand { get; }
         public ICommand SetLightThemeCommand { get; }
+        public ICommand SetGreenYellowThemeCommand { get; }
         public ICommand ToggleThemeCommand { get; }
+
+        /// <summary>
+        /// Liga ou desliga a inicialização automática do CobraPix com o Windows.
+        /// Quando ativado, registra o executável na chave Run do registro.
+        /// Quando desativado, remove o registro.
+        /// Estado é persistido na tabela AppSettings do banco local.
+        /// </summary>
+        public bool StartWithWindows
+        {
+            get => _startWithWindows;
+            set
+            {
+                if (SetProperty(ref _startWithWindows, value))
+                {
+                    _ = SetStartWithWindowsAsync(value);
+                }
+            }
+        }
+
+        public ICommand ToggleStartWithWindowsCommand { get; }
 
         public bool NotificationsEnabled
         {
@@ -423,6 +521,42 @@ namespace CobraPix_PC.ViewModels
             get => _isBusyBackup;
             set => SetProperty(ref _isBusyBackup, value);
         }
+
+        // ==========================================
+        // PROPRIEDADES DE BACKUP AUTOMÁTICO DIÁRIO (Fase 6)
+        // ==========================================
+        private bool _autoBackupEnabled = true;
+        private string? _lastAutoBackupInfo;
+        private bool _isBusyAutoBackup;
+
+        public bool AutoBackupEnabled
+        {
+            get => _autoBackupEnabled;
+            set
+            {
+                if (SetProperty(ref _autoBackupEnabled, value))
+                {
+                    _ = SaveAutoBackupEnabledAsync(value);
+                }
+            }
+        }
+
+        public string? LastAutoBackupInfo
+        {
+            get => _lastAutoBackupInfo;
+            set => SetProperty(ref _lastAutoBackupInfo, value);
+        }
+
+        public bool IsBusyAutoBackup
+        {
+            get => _isBusyAutoBackup;
+            set => SetProperty(ref _isBusyAutoBackup, value);
+        }
+
+        public string AutoBackupDirectory => _backupService?.GetAutoBackupDirectory() ?? string.Empty;
+
+        public ICommand OpenAutoBackupFolderCommand { get; }
+        public ICommand RunAutoBackupNowCommand { get; }
 
         // Propriedades do Plano CobraPix (Fase 13)
         public PlanType CurrentPlan
@@ -904,7 +1038,7 @@ namespace CobraPix_PC.ViewModels
             INotificationService notificationService,
             IBackupService? backupService,
             IProService? proService)
-            : this(notificationService, backupService, proService, App.Services?.GetService<IThemeService>(), App.Services?.GetService<IAndroidImportService>(), App.Services?.GetService<IUpdateService>(), null, null)
+            : this(notificationService, backupService, proService, null, null, null, null, null)
         {
         }
 
@@ -913,7 +1047,7 @@ namespace CobraPix_PC.ViewModels
             IBackupService? backupService,
             IProService? proService,
             IThemeService? themeService)
-            : this(notificationService, backupService, proService, themeService, App.Services?.GetService<IAndroidImportService>(), App.Services?.GetService<IUpdateService>(), null, null)
+            : this(notificationService, backupService, proService, themeService, null, null, null, null)
         {
         }
 
@@ -923,7 +1057,7 @@ namespace CobraPix_PC.ViewModels
             IProService? proService,
             IThemeService? themeService,
             IAndroidImportService? androidImportService)
-            : this(notificationService, backupService, proService, themeService, androidImportService, App.Services?.GetService<IUpdateService>(), null, null)
+            : this(notificationService, backupService, proService, themeService, androidImportService, null, null, null)
         {
         }
 
@@ -954,15 +1088,22 @@ namespace CobraPix_PC.ViewModels
             IAndroidImportService? androidImportService,
             IUpdateService? updateService,
             IExcelExportService? excelExportService,
-            IUpdateDownloadService? updateDownloadService = null)
+            IUpdateDownloadService? updateDownloadService = null,
+            CobraPixDbContext? dbContext = null)
         {
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _backupService = backupService;
             _proService = proService;
-            _themeService = themeService ?? App.Services?.GetService<IThemeService>();
-            _androidImportService = androidImportService ?? App.Services?.GetService<IAndroidImportService>();
+            _dbContext = dbContext
+                ?? (notificationService as NotificationService)?.DbContext
+                ?? (backupService as BackupService)?.DbContext
+                ?? (proService as ProService)?.DbContext
+                ?? (themeService as ThemeService)?.DbContext;
+
+            _themeService = themeService ?? (_dbContext != null ? new ThemeService(_dbContext) : App.Services?.GetService<IThemeService>());
+            _androidImportService = androidImportService ?? (_dbContext != null ? new AndroidImportService(_dbContext) : App.Services?.GetService<IAndroidImportService>());
             _updateService = updateService ?? App.Services?.GetService<IUpdateService>() ?? new UpdateService();
-            _excelExportService = excelExportService ?? App.Services?.GetService<IExcelExportService>() ?? new ExcelExportService(new CobraPixDbContext());
+            _excelExportService = excelExportService ?? (_dbContext != null ? new ExcelExportService(_dbContext) : App.Services?.GetService<IExcelExportService>() ?? new ExcelExportService(new CobraPixDbContext()));
             _updateDownloadService = updateDownloadService ?? App.Services?.GetService<IUpdateDownloadService>() ?? new UpdateDownloadService(_updateService);
 
             if (_proService != null)
@@ -993,10 +1134,22 @@ namespace CobraPix_PC.ViewModels
 
             SetDarkThemeCommand = new RelayCommand(async () => await SetAppThemeAsync(AppTheme.Dark));
             SetLightThemeCommand = new RelayCommand(async () => await SetAppThemeAsync(AppTheme.Light));
+            SetGreenYellowThemeCommand = new RelayCommand(async () => await SetAppThemeAsync(AppTheme.GreenYellow));
             ToggleThemeCommand = new RelayCommand(async () => await SetAppThemeAsync(IsDarkTheme ? AppTheme.Light : AppTheme.Dark));
+
+            // Iniciar com o Windows (Fase Boot 1.0.4)
+            ToggleStartWithWindowsCommand = new RelayCommand(() => StartWithWindows = !StartWithWindows);
+
+            // Chave Pix para Cobranças (Fase 4)
+            SavePixKeyCommand = new RelayCommand(async () => await SavePixKeyAsync());
+
+            // Nome da Empresa / Emissor (Fase 5)
+            SaveCompanyNameCommand = new RelayCommand(async () => await SaveCompanyNameAsync());
 
             CreateBackupCommand = new RelayCommand(async () => await CreateBackupAsync());
             RestoreBackupCommand = new RelayCommand(async () => await RestoreBackupAsync());
+            OpenAutoBackupFolderCommand = new RelayCommand(OpenAutoBackupFolder);
+            RunAutoBackupNowCommand = new RelayCommand(async () => await RunAutoBackupNowAsync(), () => !IsBusyAutoBackup);
             ExportToExcelCommand = new RelayCommand(async () => await ExportToExcelAsync(), () => !IsBusyExportingExcel);
 
             OpenMonthlySubscriptionCommand = new RelayCommand(async () => await HandleSubscriptionClickAsync(isAnnual: false));
@@ -1035,6 +1188,9 @@ namespace CobraPix_PC.ViewModels
             _ = LoadBackupInfoAsync();
             _ = LoadPlanInfoAsync();
             _ = LoadThemeInfoAsync();
+            _ = LoadStartWithWindowsAsync();
+            _ = LoadPixKeyAsync();
+            _ = LoadCompanyNameAsync();
         }
 
         private void SyncSelectedSoundOption()
@@ -1059,6 +1215,490 @@ namespace CobraPix_PC.ViewModels
             if (themeSvc != null)
             {
                 CurrentAppTheme = await themeSvc.GetThemeAsync();
+            }
+        }
+
+        // ──────────────────────────────────────────────────────────────────────
+        // INICIAR COM O WINDOWS (Fase Boot 1.0.4)
+        // Persistência: tabela AppSettings, chave "App.StartWithWindows"
+        // Registro: HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run
+        //           Valor: "CobraPixPC" → "<exe_path> --minimized"
+        // ──────────────────────────────────────────────────────────────────────
+
+        private const string StartWithWindowsSettingKey = "App.StartWithWindows";
+        private const string StartWithWindowsRegistryValueName = "CobraPixPC";
+
+        // Estado em memória simulado para testes automatizados (impede qualquer efeito colateral em HKCU\...\Run)
+        private static bool _testSimulatedRegistryStartWithWindows;
+
+        public static void ResetTestSimulatedRegistry(bool initialState = false)
+        {
+            _testSimulatedRegistryStartWithWindows = initialState;
+        }
+
+        public static bool GetTestSimulatedRegistryState()
+        {
+            return _testSimulatedRegistryStartWithWindows;
+        }
+
+        /// <summary>
+        /// Obtém o caminho absoluto determinístico do executável do CobraPix atualmente em execução.
+        /// </summary>
+        private static string GetCurrentExecutablePath()
+        {
+            try
+            {
+                string? processPath = Environment.ProcessPath;
+                if (!string.IsNullOrWhiteSpace(processPath) && System.IO.File.Exists(processPath))
+                {
+                    return System.IO.Path.GetFullPath(processPath);
+                }
+
+                string? mainModule = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+                if (!string.IsNullOrWhiteSpace(mainModule) && System.IO.File.Exists(mainModule))
+                {
+                    return System.IO.Path.GetFullPath(mainModule);
+                }
+
+                string baseDirExe = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "CobraPix PC.exe");
+                if (System.IO.File.Exists(baseDirExe))
+                {
+                    return System.IO.Path.GetFullPath(baseDirExe);
+                }
+
+                string assemblyLoc = System.Reflection.Assembly.GetExecutingAssembly().Location;
+                if (!string.IsNullOrWhiteSpace(assemblyLoc))
+                {
+                    string candidateExe = System.IO.Path.ChangeExtension(assemblyLoc, ".exe");
+                    if (System.IO.File.Exists(candidateExe))
+                    {
+                        return System.IO.Path.GetFullPath(candidateExe);
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "CobraPix PC.exe");
+        }
+
+        /// <summary>
+        /// Carrega o estado persistido da configuração "Iniciar com o Windows" do banco local.
+        /// </summary>
+        public async Task LoadStartWithWindowsAsync()
+        {
+            try
+            {
+                CobraPixDbContext? ctx = _dbContext;
+                using var scope = ctx == null ? App.Services?.CreateScope() : null;
+                if (ctx == null)
+                {
+                    if (scope == null) return;
+                    ctx = scope.ServiceProvider.GetService<CobraPix_PC.Data.CobraPixDbContext>();
+                    if (ctx == null) return;
+                }
+
+                var setting = await ctx.AppSettings
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(s => s.Key == StartWithWindowsSettingKey);
+
+                bool isPersisted = setting != null && setting.Value == "true";
+                bool isRegistered = IsStartWithWindowsRegistered();
+
+                // Se o banco configurou explicitamente 'true' e o registro não existe, restaura o registro.
+                // Se o registro já existe no Windows (mesmo antes de salvar no banco), preserva como ativo.
+                bool shouldBeActive = isPersisted || isRegistered;
+
+                if (shouldBeActive)
+                {
+                    RegisterStartWithWindows();
+                }
+
+                _startWithWindows = shouldBeActive;
+                OnPropertyChanged(nameof(StartWithWindows));
+            }
+            catch (InvalidOperationException secEx) when (secEx.Message.Contains("[SEGURANÇA DE EXECUÇÃO]", StringComparison.Ordinal))
+            {
+                throw;
+            }
+            catch
+            {
+                // Fallback defensivo: se falhar, lê diretamente do registro sem alterar
+                _startWithWindows = IsStartWithWindowsRegistered();
+                OnPropertyChanged(nameof(StartWithWindows));
+            }
+        }
+
+        /// <summary>
+        /// Ativa ou desativa a inicialização automática com o Windows.
+        /// Atualiza o registro Run do Windows e persiste no banco AppSettings.
+        /// </summary>
+        public async Task SetStartWithWindowsAsync(bool enable)
+        {
+            try
+            {
+                // 1. Atualiza o registro do Windows (ou estado isolado em modo de teste)
+                if (enable)
+                {
+                    RegisterStartWithWindows();
+                }
+                else
+                {
+                    UnregisterStartWithWindows();
+                }
+
+                // 2. Persiste o estado no banco AppSettings
+                CobraPixDbContext? ctx = _dbContext;
+                using var scope = ctx == null ? App.Services?.CreateScope() : null;
+                if (ctx == null)
+                {
+                    if (scope == null) return;
+                    ctx = scope.ServiceProvider.GetService<CobraPix_PC.Data.CobraPixDbContext>();
+                    if (ctx == null) return;
+                }
+
+                var existing = await ctx.AppSettings
+                    .FirstOrDefaultAsync(s => s.Key == StartWithWindowsSettingKey);
+
+                string valueStr = enable ? "true" : "false";
+                if (existing != null)
+                {
+                    existing.Value = valueStr;
+                    existing.UpdatedAt = DateTime.Now;
+                }
+                else
+                {
+                    ctx.AppSettings.Add(new CobraPix_PC.Models.AppSetting
+                    {
+                        Key = StartWithWindowsSettingKey,
+                        Value = valueStr,
+                        UpdatedAt = DateTime.Now
+                    });
+                }
+                await ctx.SaveChangesAsync();
+            }
+            catch (InvalidOperationException secEx) when (secEx.Message.Contains("[SEGURANÇA DE EXECUÇÃO]", StringComparison.Ordinal))
+            {
+                throw;
+            }
+            catch
+            {
+                // Tratamento defensivo; não propaga erro para a UI
+            }
+        }
+
+        /// <summary>
+        /// Verifica se a entrada de autostart está registrada no registro do Windows.
+        /// Em modo de teste, opera exclusivamente sobre estado em memória isolado.
+        /// </summary>
+        private static bool IsStartWithWindowsRegistered()
+        {
+            if (DatabasePath.IsTestExecutionMode())
+            {
+                return _testSimulatedRegistryStartWithWindows;
+            }
+
+            try
+            {
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", writable: false);
+                return key?.GetValue(StartWithWindowsRegistryValueName) != null;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private const string StartupApprovedRegistrySubKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
+
+        /// <summary>
+        /// Remove qualquer entrada prévia de bloqueio ou estado obsoleto do CobraPix PC em StartupApproved\Run,
+        /// permitindo que o Windows trate a inicialização a partir de HKCU\Run como nova e habilitada nativamente.
+        /// </summary>
+        private static void CleanStartupApprovedEntry()
+        {
+            if (DatabasePath.IsTestExecutionMode())
+            {
+                return;
+            }
+
+            try
+            {
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(StartupApprovedRegistrySubKey, writable: true);
+                if (key?.GetValue(StartWithWindowsRegistryValueName) != null)
+                {
+                    key.DeleteValue(StartWithWindowsRegistryValueName, throwOnMissingValue: false);
+                }
+            }
+            catch
+            {
+                // Falha silenciosa
+            }
+        }
+
+        /// <summary>
+        /// Registra o CobraPix PC para iniciar com o Windows via HKCU Run.
+        /// Utiliza o argumento --minimized para que a janela abra minimizada.
+        /// Limpa qualquer entrada residual em StartupApproved\Run para o Windows tratar como nova.
+        /// Em modo de teste, impede qualquer escrita no Registro do Windows.
+        /// </summary>
+        private static void RegisterStartWithWindows()
+        {
+            if (DatabasePath.IsTestExecutionMode())
+            {
+                _testSimulatedRegistryStartWithWindows = true;
+                return;
+            }
+
+            try
+            {
+                string exePath = GetCurrentExecutablePath();
+                string value = $"\"{exePath}\" --minimized";
+
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", writable: true);
+                key?.SetValue(StartWithWindowsRegistryValueName, value, Microsoft.Win32.RegistryValueKind.String);
+
+                // Remove entrada antiga do CobraPixPC em StartupApproved\Run se existir
+                CleanStartupApprovedEntry();
+            }
+            catch
+            {
+                // Falha silenciosa; sem elevação necessária pois é HKCU
+            }
+        }
+
+        /// <summary>
+        /// Remove a entrada de autostart do CobraPix PC do registro do Windows e de StartupApproved.
+        /// Em modo de teste, impede qualquer escrita ou exclusão no Registro do Windows.
+        /// </summary>
+        private static void UnregisterStartWithWindows()
+        {
+            if (DatabasePath.IsTestExecutionMode())
+            {
+                _testSimulatedRegistryStartWithWindows = false;
+                return;
+            }
+
+            try
+            {
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", writable: true);
+                if (key?.GetValue(StartWithWindowsRegistryValueName) != null)
+                {
+                    key.DeleteValue(StartWithWindowsRegistryValueName, throwOnMissingValue: false);
+                }
+
+                // Remove também de StartupApproved para não deixar resíduo no perfil do usuário
+                CleanStartupApprovedEntry();
+            }
+            catch
+            {
+                // Falha silenciosa
+            }
+        }
+
+        /// <summary>
+        /// Carrega a Chave Pix configurada a partir do banco de dados local (AppSettings).
+        /// </summary>
+        public async Task LoadPixKeyAsync()
+        {
+            try
+            {
+                CobraPixDbContext? ctx = _dbContext;
+                using var scope = ctx == null ? App.Services?.CreateScope() : null;
+                if (ctx == null)
+                {
+                    if (scope == null) return;
+                    ctx = scope.ServiceProvider.GetService<CobraPix_PC.Data.CobraPixDbContext>();
+                    if (ctx == null) return;
+                }
+
+                var setting = await ctx.AppSettings
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(s => s.Key == PixKeySettingKey);
+
+                _pixKey = setting?.Value ?? string.Empty;
+                OnPropertyChanged(nameof(PixKey));
+
+                if (scope != null)
+                {
+                    var whatsAppSvc = scope.ServiceProvider.GetService<IWhatsAppService>();
+                    if (whatsAppSvc != null)
+                    {
+                        whatsAppSvc.PixKey = _pixKey;
+                    }
+                }
+            }
+            catch (InvalidOperationException secEx) when (secEx.Message.Contains("[SEGURANÇA DE EXECUÇÃO]", StringComparison.Ordinal))
+            {
+                throw;
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>
+        /// Salva ou limpa a Chave Pix no banco de dados local (AppSettings) e atualiza o serviço de WhatsApp.
+        /// </summary>
+        public async Task SavePixKeyAsync()
+        {
+            try
+            {
+                string trimmed = PixKey?.Trim() ?? string.Empty;
+                CobraPixDbContext? ctx = _dbContext;
+                using var scope = ctx == null ? App.Services?.CreateScope() : null;
+                if (ctx == null && scope != null)
+                {
+                    ctx = scope.ServiceProvider.GetService<CobraPix_PC.Data.CobraPixDbContext>();
+                }
+
+                if (ctx != null)
+                {
+                    var existing = await ctx.AppSettings.FirstOrDefaultAsync(s => s.Key == PixKeySettingKey);
+                    if (existing != null)
+                    {
+                        existing.Value = trimmed;
+                        existing.UpdatedAt = DateTime.Now;
+                    }
+                    else
+                    {
+                        ctx.AppSettings.Add(new CobraPix_PC.Models.AppSetting
+                        {
+                            Key = PixKeySettingKey,
+                            Value = trimmed,
+                            UpdatedAt = DateTime.Now
+                        });
+                    }
+                    await ctx.SaveChangesAsync();
+                }
+
+                if (scope != null)
+                {
+                    var whatsAppSvc = scope.ServiceProvider.GetService<IWhatsAppService>();
+                    if (whatsAppSvc != null)
+                    {
+                        whatsAppSvc.PixKey = trimmed;
+                    }
+                }
+
+                PixKeyFeedbackMessage = string.IsNullOrEmpty(trimmed)
+                    ? "Chave Pix removida. As mensagens de cobrança serão enviadas sem chave Pix."
+                    : "Chave Pix salva com sucesso! Será incluída automaticamente nas mensagens.";
+                HasPixKeyFeedback = true;
+            }
+            catch (InvalidOperationException secEx) when (secEx.Message.Contains("[SEGURANÇA DE EXECUÇÃO]", StringComparison.Ordinal))
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                PixKeyFeedbackMessage = "Erro ao salvar chave Pix: " + ex.Message;
+                HasPixKeyFeedback = true;
+            }
+        }
+
+        /// <summary>
+        /// Carrega o Nome da Empresa / Emissor configurado a partir do banco de dados local (AppSettings).
+        /// </summary>
+        public async Task LoadCompanyNameAsync()
+        {
+            try
+            {
+                CobraPixDbContext? ctx = _dbContext;
+                using var scope = ctx == null ? App.Services?.CreateScope() : null;
+                if (ctx == null)
+                {
+                    if (scope == null) return;
+                    ctx = scope.ServiceProvider.GetService<CobraPix_PC.Data.CobraPixDbContext>();
+                    if (ctx == null) return;
+                }
+
+                var setting = await ctx.AppSettings
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(s => s.Key == CompanyNameSettingKey || s.Key == "App.IssuerName");
+
+                _companyName = setting?.Value ?? string.Empty;
+                OnPropertyChanged(nameof(CompanyName));
+
+                if (scope != null)
+                {
+                    var pdfSvc = scope.ServiceProvider.GetService<IReceiptPdfService>();
+                    if (pdfSvc != null)
+                    {
+                        pdfSvc.CompanyName = _companyName;
+                    }
+                }
+            }
+            catch (InvalidOperationException secEx) when (secEx.Message.Contains("[SEGURANÇA DE EXECUÇÃO]", StringComparison.Ordinal))
+            {
+                throw;
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>
+        /// Salva ou limpa o Nome da Empresa / Emissor no banco de dados local (AppSettings) e atualiza o serviço de PDF.
+        /// </summary>
+        public async Task SaveCompanyNameAsync()
+        {
+            try
+            {
+                string trimmed = CompanyName?.Trim() ?? string.Empty;
+                CobraPixDbContext? ctx = _dbContext;
+                using var scope = ctx == null ? App.Services?.CreateScope() : null;
+                if (ctx == null && scope != null)
+                {
+                    ctx = scope.ServiceProvider.GetService<CobraPix_PC.Data.CobraPixDbContext>();
+                }
+
+                if (ctx != null)
+                {
+                    var existing = await ctx.AppSettings.FirstOrDefaultAsync(s => s.Key == CompanyNameSettingKey);
+                    if (existing != null)
+                    {
+                        existing.Value = trimmed;
+                        existing.UpdatedAt = DateTime.Now;
+                    }
+                    else
+                    {
+                        ctx.AppSettings.Add(new CobraPix_PC.Models.AppSetting
+                        {
+                            Key = CompanyNameSettingKey,
+                            Value = trimmed,
+                            UpdatedAt = DateTime.Now
+                        });
+                    }
+                    await ctx.SaveChangesAsync();
+                }
+
+                if (scope != null)
+                {
+                    var pdfSvc = scope.ServiceProvider.GetService<IReceiptPdfService>();
+                    if (pdfSvc != null)
+                    {
+                        pdfSvc.CompanyName = trimmed;
+                    }
+                }
+
+                CompanyNameFeedbackMessage = string.IsNullOrEmpty(trimmed)
+                    ? "Nome da empresa removido. Os recibos em PDF serão emitidos sem identificação de emissor."
+                    : "Nome da empresa salvo com sucesso! Será incluído no cabeçalho dos recibos em PDF.";
+                HasCompanyNameFeedback = true;
+            }
+            catch (InvalidOperationException secEx) when (secEx.Message.Contains("[SEGURANÇA DE EXECUÇÃO]", StringComparison.Ordinal))
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                CompanyNameFeedbackMessage = "Erro ao salvar nome da empresa: " + ex.Message;
+                HasCompanyNameFeedback = true;
             }
         }
 
@@ -1115,6 +1755,105 @@ namespace CobraPix_PC.ViewModels
             else
             {
                 LastBackupInfo = "Serviço de backup não inicializado.";
+            }
+
+            await LoadAutoBackupInfoAsync();
+        }
+
+        public async Task LoadAutoBackupInfoAsync()
+        {
+            if (_backupService != null)
+            {
+                _autoBackupEnabled = await _backupService.IsAutoBackupEnabledAsync();
+                OnPropertyChanged(nameof(AutoBackupEnabled));
+
+                var autoInfo = await _backupService.GetLastAutoBackupInfoAsync();
+                LastAutoBackupInfo = !string.IsNullOrEmpty(autoInfo) ? autoInfo : "Pendente para hoje (será gerado automaticamente).";
+            }
+            else
+            {
+                LastAutoBackupInfo = "Recurso indisponível.";
+            }
+            OnPropertyChanged(nameof(AutoBackupDirectory));
+        }
+
+        public async Task SaveAutoBackupEnabledAsync(bool enabled)
+        {
+            if (_backupService != null)
+            {
+                await _backupService.SetAutoBackupEnabledAsync(enabled);
+                await LoadAutoBackupInfoAsync();
+            }
+        }
+
+        public Action<System.Diagnostics.ProcessStartInfo>? ProcessStarterFunc { get; set; }
+
+        public void OpenAutoBackupFolder()
+        {
+            if (DatabasePath.IsTestExecutionMode())
+            {
+                return;
+            }
+
+            try
+            {
+                string dir = AutoBackupDirectory;
+                if (!string.IsNullOrWhiteSpace(dir))
+                {
+                    if (!Directory.Exists(dir))
+                    {
+                        Directory.CreateDirectory(dir);
+                    }
+                    var psi = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = dir,
+                        UseShellExecute = true
+                    };
+                    if (ProcessStarterFunc != null)
+                    {
+                        ProcessStarterFunc(psi);
+                    }
+                    else
+                    {
+                        System.Diagnostics.Process.Start(psi);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        public async Task RunAutoBackupNowAsync()
+        {
+            if (_backupService == null || IsBusyAutoBackup) return;
+
+            IsBusyAutoBackup = true;
+            try
+            {
+                var result = await _backupService.CheckAndPerformDailyAutoBackupAsync(force: true);
+                if (result != null && result.Success)
+                {
+                    LastAutoBackupInfo = $"Concluído com sucesso agora: {Path.GetFileName(result.FilePath)} ({result.FileSize:N0} bytes).";
+                }
+                else if (result != null && !result.Success)
+                {
+                    LastAutoBackupInfo = $"Falha ao gerar backup: {result.Message}";
+                }
+                else
+                {
+                    await LoadAutoBackupInfoAsync();
+                }
+            }
+            catch (InvalidOperationException secEx) when (secEx.Message.Contains("[SEGURANÇA DE EXECUÇÃO]", StringComparison.Ordinal))
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                LastAutoBackupInfo = $"Erro: {ex.Message}";
+            }
+            finally
+            {
+                IsBusyAutoBackup = false;
             }
         }
 
@@ -1176,6 +1915,10 @@ namespace CobraPix_PC.ViewModels
             }
             catch (Exception ex)
             {
+                if (ex is InvalidOperationException && ex.Message.Contains("[SEGURANÇA DE EXECUÇÃO]", StringComparison.Ordinal))
+                {
+                    throw;
+                }
                 StatusMessage = "Erro ao salvar configurações: " + ex.Message;
             }
             finally
@@ -1196,6 +1939,30 @@ namespace CobraPix_PC.ViewModels
             }
         }
 
+        public static string GetSoundsDirectory()
+        {
+            string? overrideDir = Environment.GetEnvironmentVariable(SoundsDirectoryEnvVar);
+            if (DatabasePath.IsTestExecutionMode())
+            {
+                if (string.IsNullOrWhiteSpace(overrideDir))
+                {
+                    throw new InvalidOperationException(
+                        $"[SEGURANÇA DE EXECUÇÃO] Operação de sons em modo de teste abortada: nenhum diretório descartável foi configurado em {SoundsDirectoryEnvVar}.");
+                }
+
+                return DatabasePath.AssertSafeTestDirectoryPath(overrideDir, "Resolução de diretório de sons personalizados");
+            }
+
+            if (!string.IsNullOrWhiteSpace(overrideDir))
+            {
+                return System.IO.Path.GetFullPath(overrideDir.Trim());
+            }
+
+            return System.IO.Path.Combine(
+                DatabasePath.GetProductionDirectoryPath(),
+                "sounds");
+        }
+
         public async Task SelectCustomSoundAsync()
         {
             StatusMessage = null;
@@ -1207,11 +1974,25 @@ namespace CobraPix_PC.ViewModels
                 return;
             }
 
+            if (DatabasePath.IsTestExecutionMode())
+            {
+                chosen = DatabasePath.AssertSafeTestFilePath(chosen, "Seleção de arquivo de áudio personalizado");
+            }
+
             if (!chosen.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
             {
                 StatusMessage = "Apenas arquivos de áudio no formato .wav são suportados pelo sistema de alertas locais.";
                 ShowSaveSuccess = false;
                 return;
+            }
+
+            string localDir = GetSoundsDirectory();
+            string fileName = System.IO.Path.GetFileName(chosen);
+            string destPath = System.IO.Path.Combine(localDir, fileName);
+
+            if (DatabasePath.IsTestExecutionMode())
+            {
+                destPath = DatabasePath.AssertSafeTestFilePath(destPath, "Gravação de arquivo de áudio personalizado");
             }
 
             if (!System.IO.File.Exists(chosen))
@@ -1223,14 +2004,7 @@ namespace CobraPix_PC.ViewModels
 
             try
             {
-                string localDir = System.IO.Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "CobraPix",
-                    "sounds");
                 System.IO.Directory.CreateDirectory(localDir);
-
-                string fileName = System.IO.Path.GetFileName(chosen);
-                string destPath = System.IO.Path.Combine(localDir, fileName);
 
                 if (!chosen.Equals(destPath, StringComparison.OrdinalIgnoreCase))
                 {
@@ -1247,6 +2021,10 @@ namespace CobraPix_PC.ViewModels
             }
             catch (Exception ex)
             {
+                if (ex is InvalidOperationException && ex.Message.Contains("[SEGURANÇA DE EXECUÇÃO]", StringComparison.Ordinal))
+                {
+                    throw;
+                }
                 StatusMessage = "Erro ao configurar áudio personalizado: " + ex.Message;
                 ShowSaveSuccess = false;
             }

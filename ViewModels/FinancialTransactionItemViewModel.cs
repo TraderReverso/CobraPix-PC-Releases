@@ -16,7 +16,15 @@ namespace CobraPix_PC.ViewModels
         public bool IsInstallment => TransactionType == FinancialTransactionType.Installment;
         public bool IsMonthly => TransactionType == FinancialTransactionType.Monthly;
 
-        public string TypeBadge => IsMonthly ? "MENSALIDADE" : "PARCELA";
+        public bool IsRefund => Transaction.IsRefund;
+        public bool IsRefunded => Transaction.IsRefunded;
+        public decimal? RefundedAmount => Transaction.RefundedAmount;
+        public bool CanRefund => !IsRefund && !IsRefunded;
+
+        public string TypeBadge => IsRefund ? "ESTORNO" : (IsMonthly ? "MENSALIDADE" : "PARCELA");
+        public string TypeBadgeBackground => IsRefund ? "#2D1515" : (IsMonthly ? "#2A2415" : "#1E293B");
+        public string TypeBadgeForeground => IsRefund ? "#F87171" : (IsMonthly ? "#FBBF24" : "#60A5FA");
+        public string TypeBadgeBorder => IsRefund ? "#DC2626" : (IsMonthly ? "#D97706" : "#3B82F6");
 
         public int ClientId { get; }
         public string ClientName { get; }
@@ -25,7 +33,7 @@ namespace CobraPix_PC.ViewModels
         public string FormattedPhone => string.IsNullOrWhiteSpace(ClientPhone) ? "Sem telefone" : ClientPhone;
 
         public decimal Amount { get; }
-        public string FormattedAmount => $"+ {Amount.ToString("C2", PtBr)}";
+        public string FormattedAmount => IsRefund ? $"- {Amount.ToString("C2", PtBr)}" : $"+ {Amount.ToString("C2", PtBr)}";
 
         public DateTime PaymentDate { get; }
         public string FormattedDate => PaymentDate.ToString("dd/MM/yyyy HH:mm");
@@ -52,7 +60,22 @@ namespace CobraPix_PC.ViewModels
         public int? ReferenceYear { get; }
         public string Reference { get; }
 
-        public string StatusText => "RECEBIDO";
+        public decimal? OriginalAmount => Transaction.OriginalAmount;
+        public decimal? TotalPaid => Transaction.TotalPaid;
+        public decimal? RemainingBalance => Transaction.RemainingBalance;
+
+        public string FormattedOriginalAmount => OriginalAmount.HasValue ? OriginalAmount.Value.ToString("C2", PtBr) : "-";
+        public string FormattedTotalPaid => TotalPaid.HasValue ? TotalPaid.Value.ToString("C2", PtBr) : "-";
+        public string FormattedRemainingBalance => RemainingBalance.HasValue ? RemainingBalance.Value.ToString("C2", PtBr) : "-";
+
+        public DateTime Date => PaymentDate;
+        public string FormattedMethod => PaymentMethodBadge;
+        public string? Competence => ReferenceMonth.HasValue && ReferenceYear.HasValue ? $"{ReferenceMonth.Value:D2}/{ReferenceYear.Value}" : null;
+
+        public string StatusText => IsRefund ? "ESTORNADO" : (IsRefunded ? "ESTORNADO" : "RECEBIDO");
+        public string StatusForeground => (IsRefund || IsRefunded) ? "#EF4444" : "#10B981";
+        public string StatusBackground => (IsRefund || IsRefunded) ? "#2D1515" : "#064E3B";
+        public string StatusBorder => (IsRefund || IsRefunded) ? "#DC2626" : "#059669";
 
         public FinancialTransaction Transaction { get; }
 

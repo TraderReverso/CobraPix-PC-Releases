@@ -42,6 +42,11 @@ namespace CobraPix_PC.ViewModels
         private string _formAmountText = "100,00";
         private int _formInstallmentCount = 3;
         private DateTime _formFirstDueDate = DateTime.Today.AddMonths(1);
+        private double _formContractInterestRate = 0.0;
+        private string _formContractInterestRateText = "0";
+        private bool _formUseFifthBusinessDay = false;
+        private int _formPeriodicity = 0; // 0: Mensal, 1: Semanal, 2: Quinzenal
+        private DayOfWeek? _formTargetWeekday = null;
         private string? _formDescription;
         private string? _formNotes;
         private string? _formErrorMessage;
@@ -155,6 +160,135 @@ namespace CobraPix_PC.ViewModels
             {
                 if (SetProperty(ref _formFirstDueDate, value))
                 {
+                    UpdatePreview();
+                }
+            }
+        }
+
+        public List<PeriodicityOption> PeriodicityOptions { get; } = new()
+        {
+            new PeriodicityOption { Value = 0, DisplayName = "Mensal" },
+            new PeriodicityOption { Value = 1, DisplayName = "Semanal" },
+            new PeriodicityOption { Value = 2, DisplayName = "Quinzenal" }
+        };
+
+        public List<WeekdayOption> WeekdayOptions { get; } = new()
+        {
+            new WeekdayOption { Value = 0, DisplayName = "Domingo" },
+            new WeekdayOption { Value = 1, DisplayName = "Segunda-feira" },
+            new WeekdayOption { Value = 2, DisplayName = "Terça-feira" },
+            new WeekdayOption { Value = 3, DisplayName = "Quarta-feira" },
+            new WeekdayOption { Value = 4, DisplayName = "Quinta-feira" },
+            new WeekdayOption { Value = 5, DisplayName = "Sexta-feira" },
+            new WeekdayOption { Value = 6, DisplayName = "Sábado" }
+        };
+
+        public string FormContractInterestRateText
+        {
+            get => _formContractInterestRateText;
+            set
+            {
+                if (SetProperty(ref _formContractInterestRateText, value))
+                {
+                    string clean = value?.Replace(',', '.').Trim() ?? "0";
+                    if (double.TryParse(clean, NumberStyles.Any, CultureInfo.InvariantCulture, out double parsed) && parsed >= 0)
+                    {
+                        _formContractInterestRate = parsed;
+                    }
+                    else
+                    {
+                        _formContractInterestRate = 0.0;
+                    }
+                    OnPropertyChanged(nameof(FormContractInterestRate));
+                    UpdatePreview();
+                }
+            }
+        }
+
+        public double FormContractInterestRate
+        {
+            get => _formContractInterestRate;
+            set
+            {
+                if (SetProperty(ref _formContractInterestRate, value))
+                {
+                    _formContractInterestRateText = value.ToString(CultureInfo.CurrentCulture);
+                    OnPropertyChanged(nameof(FormContractInterestRateText));
+                    UpdatePreview();
+                }
+            }
+        }
+
+        public bool FormUseFifthBusinessDay
+        {
+            get => _formUseFifthBusinessDay;
+            set
+            {
+                if (SetProperty(ref _formUseFifthBusinessDay, value))
+                {
+                    if (value && _formPeriodicity != 0)
+                    {
+                        _formPeriodicity = 0;
+                        OnPropertyChanged(nameof(FormPeriodicity));
+                        OnPropertyChanged(nameof(IsPeriodicityMonthly));
+                        OnPropertyChanged(nameof(IsPeriodicityWeeklyOrBiweekly));
+                    }
+                    UpdatePreview();
+                }
+            }
+        }
+
+        public int FormPeriodicity
+        {
+            get => _formPeriodicity;
+            set
+            {
+                if (SetProperty(ref _formPeriodicity, value))
+                {
+                    if (value != 0)
+                    {
+                        _formUseFifthBusinessDay = false;
+                        OnPropertyChanged(nameof(FormUseFifthBusinessDay));
+                        if (!_formTargetWeekday.HasValue)
+                        {
+                            _formTargetWeekday = _formFirstDueDate.DayOfWeek;
+                            OnPropertyChanged(nameof(FormTargetWeekday));
+                            OnPropertyChanged(nameof(FormTargetWeekdayIndex));
+                        }
+                    }
+                    OnPropertyChanged(nameof(IsPeriodicityMonthly));
+                    OnPropertyChanged(nameof(IsPeriodicityWeeklyOrBiweekly));
+                    UpdatePreview();
+                }
+            }
+        }
+
+        public bool IsPeriodicityMonthly => FormPeriodicity == 0;
+        public bool IsPeriodicityWeeklyOrBiweekly => FormPeriodicity == 1 || FormPeriodicity == 2;
+
+        public int FormTargetWeekdayIndex
+        {
+            get => _formTargetWeekday.HasValue ? (int)_formTargetWeekday.Value : (int)_formFirstDueDate.DayOfWeek;
+            set
+            {
+                if (value >= 0 && value <= 6)
+                {
+                    _formTargetWeekday = (DayOfWeek)value;
+                    OnPropertyChanged(nameof(FormTargetWeekdayIndex));
+                    OnPropertyChanged(nameof(FormTargetWeekday));
+                    UpdatePreview();
+                }
+            }
+        }
+
+        public DayOfWeek? FormTargetWeekday
+        {
+            get => _formTargetWeekday;
+            set
+            {
+                if (SetProperty(ref _formTargetWeekday, value))
+                {
+                    OnPropertyChanged(nameof(FormTargetWeekdayIndex));
                     UpdatePreview();
                 }
             }
@@ -328,6 +462,11 @@ namespace CobraPix_PC.ViewModels
                 FormAmountText = "100,00";
                 FormInstallmentCount = 3;
                 FormFirstDueDate = DateTime.Today.AddMonths(1);
+                FormContractInterestRate = 0.0;
+                FormContractInterestRateText = "0";
+                FormPeriodicity = 0;
+                FormUseFifthBusinessDay = false;
+                FormTargetWeekday = null;
                 FormDescription = string.Empty;
                 FormNotes = string.Empty;
 
@@ -354,8 +493,15 @@ namespace CobraPix_PC.ViewModels
 
             try
             {
-                // Utiliza o serviço oficial para gerar a prévia com a regra exata de centavos e datas
-                var installments = _saleService.PreviewInstallments(totalAmount, FormInstallmentCount, FormFirstDueDate);
+                // Utiliza o serviço oficial para gerar a prévia com a regra exata de centavos, juros e agendamento
+                var installments = _saleService.PreviewInstallments(
+                    totalAmount,
+                    FormInstallmentCount,
+                    FormFirstDueDate,
+                    FormContractInterestRate,
+                    FormUseFifthBusinessDay,
+                    FormPeriodicity,
+                    FormTargetWeekday);
 
                 foreach (var inst in installments)
                 {
@@ -405,7 +551,11 @@ namespace CobraPix_PC.ViewModels
                     FormInstallmentCount,
                     FormFirstDueDate,
                     FormDescription,
-                    FormNotes);
+                    FormNotes,
+                    FormContractInterestRate,
+                    FormUseFifthBusinessDay,
+                    FormPeriodicity,
+                    FormTargetWeekday);
 
                 // Carrega a venda completa com relacionamentos para exibição imediata
                 var loadedSale = await _saleService.GetSaleByIdAsync(createdSale.Id);
@@ -444,5 +594,17 @@ namespace CobraPix_PC.ViewModels
 
             return decimal.TryParse(cleanText, NumberStyles.Number, CultureInfo.InvariantCulture, out amount);
         }
+    }
+
+    public class PeriodicityOption
+    {
+        public int Value { get; set; }
+        public string DisplayName { get; set; } = string.Empty;
+    }
+
+    public class WeekdayOption
+    {
+        public int Value { get; set; }
+        public string DisplayName { get; set; } = string.Empty;
     }
 }

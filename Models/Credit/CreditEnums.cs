@@ -19,6 +19,37 @@ namespace CobraPix_PC.Models.Credit
     }
 
     /// <summary>
+    /// Periodicidade das parcelas ou ciclos do módulo Crédito & Giro.
+    /// </summary>
+    public enum CreditPeriodicity
+    {
+        /// <summary>
+        /// Diária (intervalos de 1 dia civil corrido).
+        /// </summary>
+        Daily = 1,
+
+        /// <summary>
+        /// Semanal (intervalos de 7 dias civis corridos).
+        /// </summary>
+        Weekly = 2,
+
+        /// <summary>
+        /// Quinzenal (intervalos fixos de 15 dias civis corridos).
+        /// </summary>
+        Biweekly = 3,
+
+        /// <summary>
+        /// Mensal (mesmo dia do mês civil, baseado na data inicial original com proteção de fim de mês).
+        /// </summary>
+        Monthly = 4,
+
+        /// <summary>
+        /// Intervalo personalizado em dias civis corridos.
+        /// </summary>
+        CustomDays = 5
+    }
+
+    /// <summary>
     /// Ciclo de vida do contrato de crédito.
     /// </summary>
     public enum CreditContractStatus

@@ -1,4 +1,7 @@
+using System;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using CobraPix_PC.Models;
 using CobraPix_PC.Models.Credit;
 
@@ -17,6 +20,7 @@ namespace CobraPix_PC.Data
         public DbSet<MonthlyCustomer> MonthlyCustomers => Set<MonthlyCustomer>();
         public DbSet<MonthlyPayment> MonthlyPayments => Set<MonthlyPayment>();
         public DbSet<AppSetting> AppSettings => Set<AppSetting>();
+        public DbSet<Reminder> Reminders => Set<Reminder>();
 
         // Tabelas do Módulo Crédito & Giro (Exclusivo CobraPix PRO)
         public DbSet<CreditContract> CreditContracts => Set<CreditContract>();
@@ -37,11 +41,125 @@ namespace CobraPix_PC.Data
 
         public CobraPixDbContext()
         {
+            if (DatabasePath.IsTestExecutionMode())
+            {
+                // Bloqueia imediatamente (fail-closed) tentativa de instanciar contexto padrão sem base de teste válida
+                _ = DatabasePath.GetDatabaseFilePath();
+            }
         }
 
         public CobraPixDbContext(DbContextOptions<CobraPixDbContext> options)
             : base(options)
         {
+            if (DatabasePath.IsTestExecutionMode())
+            {
+                var relationalExt = options.Extensions.OfType<RelationalOptionsExtension>().FirstOrDefault();
+                if (relationalExt == null || (string.IsNullOrWhiteSpace(relationalExt.ConnectionString) && relationalExt.Connection == null))
+                {
+                    // Contexto resolvido via DI (App.Services) sem ConnectionString explícita nem Conexão: valida imediatamente
+                    _ = DatabasePath.GetDatabaseFilePath();
+                }
+                else if (relationalExt.Connection != null)
+                {
+                    ValidateExternalDbConnection(relationalExt.Connection);
+                }
+                else if (!string.IsNullOrWhiteSpace(relationalExt.ConnectionString))
+                {
+                    ValidateConnectionString(relationalExt.ConnectionString);
+                }
+            }
+        }
+
+        private static void ValidateConnectionString(string connectionString)
+        {
+            SqliteConnectionStringBuilder? builder = null;
+            try
+            {
+                builder = new SqliteConnectionStringBuilder(connectionString);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"[SEGURANÇA DE EXECUÇÃO] Inicialização de CobraPixDbContext abortada: falha ao interpretar ConnectionString: {ex.Message}", ex);
+            }
+
+            ValidateSqliteDataSource(builder, builder.DataSource, "ConnectionString");
+        }
+
+        private static void ValidateExternalDbConnection(System.Data.Common.DbConnection connection)
+        {
+            if (connection == null)
+            {
+                throw new InvalidOperationException(
+                    "[SEGURANÇA DE EXECUÇÃO] Inicialização de CobraPixDbContext abortada: DbConnection fornecida é nula.");
+            }
+
+            string connStr = connection.ConnectionString ?? string.Empty;
+            string dataSource = connection.DataSource ?? string.Empty;
+
+            SqliteConnectionStringBuilder? builder = null;
+            if (!string.IsNullOrWhiteSpace(connStr))
+            {
+                try
+                {
+                    builder = new SqliteConnectionStringBuilder(connStr);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException(
+                        $"[SEGURANÇA DE EXECUÇÃO] Inicialização de CobraPixDbContext abortada: falha ao interpretar ConnectionString da conexão DbConnection: {ex.Message}", ex);
+                }
+            }
+
+            // Valida builder se presente
+            ValidateSqliteDataSource(builder, dataSource, "DbConnection");
+
+            // Se connection.DataSource for diferente de builder.DataSource e não vazio, valida também connection.DataSource
+            if (builder != null &&
+                !string.IsNullOrWhiteSpace(connection.DataSource) &&
+                !string.Equals(connection.DataSource, builder.DataSource, StringComparison.OrdinalIgnoreCase))
+            {
+                ValidateSqliteDataSource(null, connection.DataSource, "DbConnection (DataSource)");
+            }
+        }
+
+        private static void ValidateSqliteDataSource(SqliteConnectionStringBuilder? builder, string? rawDataSource, string sourceDescription)
+        {
+            string ds = (builder != null && !string.IsNullOrWhiteSpace(builder.DataSource))
+                ? builder.DataSource
+                : (rawDataSource ?? string.Empty);
+
+            // Rejeição adversarial de caminhos que referenciem o banco ou diretório de produção, mesmo que Mode=Memory seja alegado
+            if (!string.IsNullOrWhiteSpace(ds) && !string.Equals(ds, ":memory:", StringComparison.OrdinalIgnoreCase))
+            {
+                string prodPath = DatabasePath.GetDefaultProductionPath();
+                string prodDir = DatabasePath.GetProductionDirectoryPath();
+                if (ds.IndexOf(prodPath, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    ds.IndexOf("cobrapix.db", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    ds.IndexOf(prodDir, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    throw new InvalidOperationException(
+                        $"[SEGURANÇA DE EXECUÇÃO] Inicialização de CobraPixDbContext abortada: {sourceDescription} referencia a base ou diretório de produção.");
+                }
+            }
+
+            bool isPureMemory = string.Equals(ds, ":memory:", StringComparison.OrdinalIgnoreCase) ||
+                                (string.IsNullOrWhiteSpace(ds) && builder != null && builder.Mode == SqliteOpenMode.Memory) ||
+                                (ds.StartsWith("file:", StringComparison.OrdinalIgnoreCase) &&
+                                 (ds.Contains(":memory:") || ds.Contains("mode=memory", StringComparison.OrdinalIgnoreCase)));
+
+            if (isPureMemory)
+            {
+                return; // Conexão em memória legítima permitida sem efeito colateral
+            }
+
+            if (string.IsNullOrWhiteSpace(ds))
+            {
+                throw new InvalidOperationException(
+                    $"[SEGURANÇA DE EXECUÇÃO] Inicialização de CobraPixDbContext abortada: {sourceDescription} sem DataSource identificável.");
+            }
+
+            DatabasePath.AssertSafeTestFilePath(ds, $"Inicialização de CobraPixDbContext ({sourceDescription})");
         }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
@@ -84,6 +202,11 @@ namespace CobraPix_PC.Data
                 entity.Property(s => s.SaleDate).IsRequired();
                 entity.Property(s => s.Description).HasMaxLength(250);
                 entity.Property(s => s.Notes).HasMaxLength(1000);
+                entity.Ignore(s => s.OriginalPrincipal);
+                entity.Ignore(s => s.ContractInterestRate);
+                entity.Ignore(s => s.ContractInterestAmount);
+                entity.Ignore(s => s.UseFifthBusinessDay);
+                entity.Ignore(s => s.Periodicity);
 
                 // Relacionamento com Client (DeleteBehavior.Restrict para proteção de histórico financeiro)
                 entity.HasOne(s => s.Client)
@@ -150,6 +273,9 @@ namespace CobraPix_PC.Data
                 entity.Property(m => m.IsActive).HasDefaultValue(true);
                 entity.Property(m => m.StartDate).IsRequired();
                 entity.Property(m => m.Notes).HasMaxLength(1000);
+                entity.Ignore(m => m.OriginalMonthlyAmount);
+                entity.Ignore(m => m.ContractInterestRate);
+                entity.Ignore(m => m.ContractInterestAmount);
 
                 // Relacionamento 1-para-1 com Client (DeleteBehavior.Restrict)
                 entity.HasOne(m => m.Client)
@@ -196,6 +322,27 @@ namespace CobraPix_PC.Data
             });
 
             // ==========================================
+            // Entidade: Reminder (Módulo Lembretes)
+            // ==========================================
+            modelBuilder.Entity<Reminder>(entity =>
+            {
+                entity.ToTable("Reminders");
+                entity.HasKey(r => r.Id);
+                entity.Property(r => r.Title).IsRequired().HasMaxLength(200);
+                entity.Property(r => r.Description).HasMaxLength(2000);
+                entity.Property(r => r.Category).IsRequired().HasMaxLength(50).HasDefaultValue("Geral");
+                entity.Property(r => r.Priority).HasDefaultValue(ReminderPriority.Normal);
+                entity.Property(r => r.Status).HasDefaultValue(ReminderStatus.Pending);
+                entity.Property(r => r.Recurrence).HasDefaultValue(ReminderRecurrence.None);
+                entity.Property(r => r.HistoryLog).HasMaxLength(4000);
+
+                entity.HasIndex(r => r.DueDate);
+                entity.HasIndex(r => r.Status);
+                entity.HasIndex(r => r.Category);
+                entity.HasIndex(r => r.Priority);
+            });
+
+            // ==========================================
             // Entidades do Módulo Crédito & Giro
             // ==========================================
 
@@ -204,6 +351,8 @@ namespace CobraPix_PC.Data
                 entity.ToTable("CreditContracts");
                 entity.HasKey(c => c.Id);
                 entity.Property(c => c.ContractNumber).IsRequired().HasMaxLength(50);
+                entity.Property(c => c.Periodicity).IsRequired().HasDefaultValue(CreditPeriodicity.Monthly);
+                entity.Property(c => c.CustomIntervalDays).IsRequired(false);
                 entity.Property(c => c.Notes).HasMaxLength(1000);
                 entity.Property(c => c.CancellationReason).HasMaxLength(500);
 
